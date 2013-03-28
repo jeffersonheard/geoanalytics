@@ -1,5 +1,6 @@
 from django.contrib.gis import admin
 from ga_bigboard import models
+from mezzanine.pages.admin import PageAdmin
 
 admin.site.register(models.Annotation, admin_class=admin.OSMGeoAdmin)
 admin.site.register(models.Role)
@@ -13,3 +14,4 @@ admin.site.register(models.Overlay)
 admin.site.register(models.PersonalView, admin_class=admin.OSMGeoAdmin)
 admin.site.register(models.BBNotification, admin_class=admin.OSMGeoAdmin)
 
+admin.site.register(models.AnnotationPage, PageAdmin)

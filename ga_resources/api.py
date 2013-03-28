@@ -8,6 +8,25 @@ from ga_irods import models as irods
 from django.contrib.auth import models as auth
 
 
+class AbstractPageResource(ModelResource):
+    """Abstract class that provides sensible defaults for creating new pages via the RESTful API. e.g. unless there's
+     some specific value passed in for whether or not the page should show up in the header, footer, and sidebar, we
+     want to dehydrate that field specifically"""
+
+    def _dehydrate_with_default(self, bundle, datum, default):
+        if datum not in bundle.data or bundle.data[datum] is None:
+            return default
+
+    def dehydrate_in_menus(self, bundle):
+        return self._dehydrate_with_default(bundle, 'in_menus', False)
+
+    def dehydrate_requires_login(self, bundle):
+        return self._dehydrate_with_default(bundle, 'requires_login', False)
+
+    def dehydrate_in_sitemap(self, bundle):
+        return self._dehydrate_with_default(bundle, 'in_sitemap', False)
+
+
 class BaseMeta(object):
     allowed_methods = ['get', 'put', 'post', 'delete']
     authorization = Authorization()
@@ -41,19 +60,19 @@ class RodsEnvironment(ModelResource):
         resource_name = "irods_environment"
 
 
-class AncillaryResource(ModelResource):
+class AncillaryResource(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.AncillaryResource.objects.all()
         resource_name = "ancillary"
 
 
-class DataResource(ModelResource):
+class DataResource(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.DataResource.objects.all()
         resource_name = 'data'
 
 
-class ResourceGroup(ModelResource):
+class ResourceGroup(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.ResourceGroup.objects.all()
         resource_name = "resource_group"
@@ -67,75 +86,55 @@ resources.register(DataResource())
 resources.register(ResourceGroup())
 
 
-class Style(ModelResource):
+class Style(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.Style.objects.all()
         resource_name = "style"
 
 
-class VectorStyleTemplate(ModelResource):
+class StyleTemplate(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.StyleTemplate.objects.all()
         resource_name = "template"
 
 
-class VectorStyleTemplateVariable(ModelResource):
+class StyleTemplateVariable(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.StyleTemplateVariable.objects.all()
         resource_name = "variable"
 
 styles = Api()
 styles.register(Style())
-styles.register(VectorStyleTemplate())
-styles.register(VectorStyleTemplateVariable())
+styles.register(StyleTemplate())
+styles.register(StyleTemplateVariable())
 
 
-class LayerGroup(ModelResource):
+class RasterResourceLayer(AbstractPageResource):
     class Meta(BaseMeta):
-        queryset = models.LayerGroup.objects.all()
-        resource_name = "layer_group"
+        queryset = models.RasterResourceLayer.objects.all()
+        resource_name = 'raster_layer'
 
 
-class SOSLayer(ModelResource):
+class VectorResourceLayer(AbstractPageResource):
     class Meta(BaseMeta):
-        queryset = models.SOSLayer.objects.all()
-        resource_name = "sos"
+        queryset = models.VectorResourceLayer.objects.all()
+        resource_name = 'vector_layer'
 
 
-class WCSLayer(ModelResource):
+class AnimatedResourceLayer(AbstractPageResource):
     class Meta(BaseMeta):
-        queryset = models.WCSLayer.objects.all()
-        resource_name = "wcs"
+        queryset = models.AnimatedResourceLayer.objects.all()
+        resource_name = 'animated_layer'
 
 
-class WFSLayer(ModelResource):
+class RenderedLayer(AbstractPageResource):
     class Meta(BaseMeta):
-        queryset = models.WFSLayer.objects.all()
-        resource_name = "wfs"
+        queryset = models.RenderedLayer.objects.all()
+        resource_name = 'rendered_layer'
 
-
-class WMSLayer(ModelResource):
-    class Meta(BaseMeta):
-        queryset = models.WMSLayer.objects.all()
-        resource_name = "wms"
-
-
-class WMVSLayer(ModelResource):
-    class Meta(BaseMeta):
-        queryset = models.WMSLayer.objects.all()
-        resource_name = "wmvs"
-
-
-class WMTSLayer(ModelResource):
-    class Meta(BaseMeta):
-        queryset = models.WMTSLayer.objects.all()
-        resource_name = "wmts"
 
 layers = Api()
-layers.register(LayerGroup())
-layers.register(SOSLayer())
-layers.register(WCSLayer())
-layers.register(WFSLayer())
-layers.register(WMSLayer())
-layers.register(WMVSLayer())
-layers.register(WMTSLayer())
+layers.register(RasterResourceLayer())
+layers.register(VectorResourceLayer())
+layers.register(AnimatedResourceLayer())
+layers.register(RenderedLayer())

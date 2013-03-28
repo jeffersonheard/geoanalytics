@@ -77,11 +77,14 @@
 # If True, the south application will be automatically added to the
 # INSTALLED_APPS setting.
 USE_SOUTH = True
+SITE_TITLE = "RENCI Geoanalytics"
 
 
 ########################
 # MAIN DJANGO SETTINGS #
 ########################
+
+ALLOWED_HOSTS = '*'
 
 # People who get code error notifications.
 # In the format (('Full Name', 'email@example.com'),
@@ -110,7 +113,7 @@ LANGUAGE_CODE = "en"
 # A boolean that turns on/off debug mode. When set to ``True``, stack traces
 # are displayed for error pages. Should always be set to ``False`` in
 # production. Best set to ``True`` in local_settings.py
-DEBUG = False
+DEBUG = True
 
 # Whether a user's session cookie expires when the Web browser is closed.
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
@@ -155,7 +158,7 @@ DATABASES = {
         # Add "postgresql_psycopg2", "mysql", "sqlite3" or "oracle".
         "ENGINE": "django.contrib.gis.db.backends.spatialite",
         # DB name or path to database file if using sqlite3.
-        "NAME": "/Users/jeffersonheard/Source/ga-1.4/ga_cms.sql3",
+        "NAME": "/home/th/ga/ga_cms.sql3",
         # Not used with sqlite3.
         "USER": "",
         # Not used with sqlite3.
@@ -216,7 +219,9 @@ ROOT_URLCONF = "%s.urls" % PROJECT_DIRNAME
 # or "C:/www/django/templates".
 # Always use forward slashes, even on Windows.
 # Don't forget to use absolute paths, not relative paths.
-TEMPLATE_DIRS = (os.path.join(PROJECT_ROOT, "templates"),)
+TEMPLATE_DIRS = (os.path.join(PROJECT_ROOT, "templates"),
+    "/home/th/ga/lib/python2.7/site-packages/django/contrib/gis/templates"
+)
 
 
 ################
@@ -227,6 +232,7 @@ INSTALLED_APPS = (
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
+    "django.contrib.gis",
     "django.contrib.redirects",
     "django.contrib.sessions",
     "django.contrib.sites",
@@ -240,11 +246,12 @@ INSTALLED_APPS = (
     "mezzanine.forms",
     "mezzanine.pages",
     "mezzanine.galleries",
-    "mezzanine.twitter",
+    #"mezzanine.twitter",
     "mezzanine.accounts",
     "mezzanine.mobile",
     
     "tastypie",
+    "ga_home",
     "ga_ows",
     "ga_resources",
     "ga_irods",

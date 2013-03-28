@@ -68,7 +68,7 @@ class Migration(SchemaMigration):
             ('base_layer_type', self.gf('django.db.models.fields.CharField')(max_length=32)),
             ('base_layer_wms', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['ga_bigboard.Overlay'], null=True, blank=True)),
             ('owner', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['auth.User'])),
-            ('center', self.gf('django.contrib.gis.db.models.fields.PointField')(default=Point(0,0), srid=3857)),
+            ('center', self.gf('django.contrib.gis.db.models.fields.PointField')(default="Point(0,0)", srid=3857)),
             ('zoom_level', self.gf('django.db.models.fields.IntegerField')(default=5)),
         ))
         db.send_create_signal('ga_bigboard', ['Room'])
@@ -386,7 +386,7 @@ class Migration(SchemaMigration):
             'Meta': {'object_name': 'Room'},
             'base_layer_type': ('django.db.models.fields.CharField', [], {'max_length': '32'}),
             'base_layer_wms': ('django.db.models.fields.related.ForeignKey', [], {'to': "orm['ga_bigboard.Overlay']", 'null': 'True', 'blank': 'True'}),
-            'center': ('django.contrib.gis.db.models.fields.PointField', [], {'default': '<Point object at 0x10defdac0>', 'srid': '3857'}),
+            'center': ('django.contrib.gis.db.models.fields.PointField', [], {'default': 'Point(0, 0)', 'srid': '3857'}),
             'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
             'name': ('django.db.models.fields.CharField', [], {'unique': 'True', 'max_length': '255', 'db_index': 'True'}),
             'owner': ('django.db.models.fields.related.ForeignKey', [], {'to': "orm['auth.User']"}),

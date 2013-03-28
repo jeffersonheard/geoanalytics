@@ -4,36 +4,102 @@ var controls;
 var initted = false;
 
 $(document).ready(function() {
+    var style = new OpenLayers.Style({
+            pointWidth : 5,
+            strokeColor : "#000000",
+            strokeOpacity : 0.8,
+            strokeWidth : 1.5,
+            fillColor : "#d95f02",
+            fillOpacity : 0.6
+        },
+        {
+            rules: [
+                new OpenLayers.Rule({
+                    filter: new OpenLayers.Filter.Comparison({
+                        type: OpenLayers.Filter.Comparison.NOT_EQUAL_TO,
+                        property: 'point_radius',
+                        value: null
+                    }),
+                    symbolizer: {
+                        pointRadius : "${point_radius}"
+                    }
+                }),
+                new OpenLayers.Rule({
+                    filter: new OpenLayers.Filter.Comparison({
+                        type: OpenLayers.Filter.Comparison.NOT_EQUAL_TO,
+                        property: 'stroke_color',
+                        value: null
+                    }),
+                    symbolizer: {
+                        strokeColor : "${stroke_color}"
+                    }
+                }),
+                new OpenLayers.Rule({
+                    filter: new OpenLayers.Filter.Comparison({
+                        type: OpenLayers.Filter.Comparison.NOT_EQUAL_TO,
+                        property: 'stroke_opacity',
+                        value: null
+                    }),
+                    symbolizer: {
+                        strokeOpacity : "${stroke_opacity}"
+                    }
+                }),
+                new OpenLayers.Rule({
+                    filter: new OpenLayers.Filter.Comparison({
+                        type: OpenLayers.Filter.Comparison.NOT_EQUAL_TO,
+                        property: 'fill_color',
+                        value: null
+                    }),
+                    symbolizer: {
+                        fillColor : "${fill_color}"
+                    }
+                }),
+                new OpenLayers.Rule({
+                    filter: new OpenLayers.Filter.Comparison({
+                        type: OpenLayers.Filter.Comparison.NOT_EQUAL_TO,
+                        property: 'stroke_width',
+                        value: null
+                    }),
+                    symbolizer: {
+                        strokeWidth : "${stroke_width}"
+                    }
+                }),
+                new OpenLayers.Rule({
+                    maxScaleDenominator: 1000000,
+                    filter: new OpenLayers.Filter.Comparison({
+                        type: OpenLayers.Filter.Comparison.NOT_EQUAL_TO,
+                        property: 'label',
+                        value: null
+                    }),
+                    symbolizer: {
+                        label : "${label}",
+                        fontColor : "#000000",
+                        fontWeight: "bold",
+                        fontSize : "11px",
+                        fontFamily : "DejaVu Sans, Arial, sans-serif",
+                        labelAlign : "left",
+                        labelXOffset: 7,
+                        labelYOffset: 1,
+                        labelOutlineColor: "#ffffe0",
+                        labelOutlineWidth: 3
+                    }
+                })
+            ]
+        }
+    );
+
+
     var gm = new OpenLayers.Projection("EPSG:4326");
     var sm = new OpenLayers.Projection("EPSG:3857");
     var annotationLayer = new OpenLayers.Layer.Vector("Annotations", {
-        styleMap: new OpenLayers.StyleMap({ 'default' : {
-            strokeColor: "${stroke_color}",
-            strokeOpacity: 1,
-            strokeWidth: "${stroke_width}",
-            fillColor: "${fill_color}",
-            fillOpacity: 0.5,
-            pointRadius: "${point_radius}",
-            pointerEvents: "visiblePainted",
-            // label with \n linebreaks
-            label : "${label}",
-
-            fontColor: "black",
-            fontSize: "12px",
-            fontFamily: "Helvetica, Droid Sans, sans",
-            fontWeight: "bold",
-            labelAlign: "left",
-            labelXOffset: 8,
-            labelYOffset: -5,
-            labelOutlineColor: "#fffcbb",
-            labelOutlineWidth: 3
-        }})
+        styleMap: new OpenLayers.StyleMap({ 'default' : style })
     });
+
     var participantsLayer = new OpenLayers.Layer.Vector("Participants", {
         styleMap: new OpenLayers.StyleMap({ 'default' : {
             fill : true,
-            fillColor : '#ff6666',
-            strokeColor : '#ff6666',
+            fillColor : '#ffcf66',
+            strokeColor : '#ffcf66',
             strokeWidth : 1,
             fillOpacity : 0.6,
             graphic : true,
@@ -46,12 +112,10 @@ $(document).ready(function() {
             label : "${username}",
             labelAlign : 'l',
             labelXOffset : 7
-
         }})
     });
 
     controls = {
-        // DEBUG ONLY: layer_control : new OpenLayers.Control.LayerSwitcher(),
         navigate_control :new OpenLayers.Control.Navigation({ dragPanOptions: { enableKinetic: true}, zoomWheelEnabled: true}),
         keynav_control : new OpenLayers.Control.KeyboardDefaults(),
         point_control : new OpenLayers.Control.DrawFeature(annotationLayer, OpenLayers.Handler.Point),
@@ -178,7 +242,7 @@ $(document).ready(function() {
                         participants = {};
                         $("#participant_list>*").detach();
 
-                        participantsLayer.removeAllFeatures()
+                        participantsLayer.removeAllFeatures();
                         var participantFeatures = mapping(data, function(participant) {
                             participants[participant.user.resource_uri] = participant;
                             f = new OpenLayers.Feature.Vector(
@@ -259,6 +323,9 @@ $(document).ready(function() {
                                 case "GoogleHybrid":
                                         baseLayer = new OpenLayers.Layer.Google("Google Streets", {type: google.maps.MapTypeId.HYBRID});
                                     break;
+                                case "GoogleStreets":
+                                        baseLayer = new OpenLayers.Layer.Google("Google Streets", {type: google.maps.MapTypeId.ROADMAP});
+                                    break;
                                 case "OSM":
                                         baseLayer = new OpenLayers.Layer.OSM("OpenStreetMap");
                                     break;
@@ -285,7 +352,7 @@ $(document).ready(function() {
                             urldata = $.url();
                             if( typeof urldata.param('where') != 'undefined' && typeof urldata.param('zoom_level') != 'undefined' ) {
                                 // a center has been specified in the url
-                                var newC = new OpenLayers.LonLat(urldata.param('where').coordinates[0], urldata.param('where').coordinates[1])
+                                var newC = new OpenLayers.LonLat(urldata.param('where').coordinates[0], urldata.param('where').coordinates[1]);
                                 newC.transform(gm, sm);
                                 map.setCenter(newC, urldata.param('zoom_level')); 
                                 
@@ -428,7 +495,7 @@ $(document).ready(function() {
                                     var uri = $(this).data('view-index');
                                     var center = personalViews[uri];
                                     
-                                    var newCenter = new OpenLayers.LonLat(center.where.coordinates[0], center.where.coordinates[1])
+                                    var newCenter = new OpenLayers.LonLat(center.where.coordinates[0], center.where.coordinates[1]);
                                     newCenter.transform(gm, sm);
                                     map.setCenter(newCenter, center.zoom_level); 
                                 });
@@ -499,7 +566,7 @@ $(document).ready(function() {
                                     var uri = $(this).data('view-index');
                                     var center = bbnotifications[uri];
                                     
-                                    var newCenter = new OpenLayers.LonLat(center.where.coordinates[0], center.where.coordinates[1])
+                                    var newCenter = new OpenLayers.LonLat(center.where.coordinates[0], center.where.coordinates[1]);
                                     newCenter.transform(gm, sm);
                                     map.setCenter(newCenter, center.zoom_level); 
                                 });
@@ -639,7 +706,7 @@ $(document).ready(function() {
     // add the current center/zoom to personal views
     $('#bb_map_add_personal_view_form').submit(function(e) {
         var name = $('#bb_map_add_personal_view_name').val();
-        var description = $('#bb_map_add_personal_view_description').val();;
+        var description = $('#bb_map_add_personal_view_description').val();
         
         var c = map.getCenter();
         c.transform(sm, gm);
@@ -774,8 +841,8 @@ $(document).ready(function() {
                 type: 'Point'
             },
             zoom_level: zoom_level
-        }
-        var viewurl = urlinfo.attr('base')+bb_api_enter_room+'?'+$.param(d)
+        };
+        var viewurl = urlinfo.attr('base')+bb_api_enter_room+'?'+$.param(d);
         
         // send to each user not in sentto
         $.each(sendRoles, function(k, v) {
@@ -856,7 +923,7 @@ $(document).ready(function() {
         center.transform(sm, gm);
         bb.addNotification(subject, body, level, selected_roles, all_selected, center.lon, center.lat, map.zoom)
         if( collabnotifications_available == true ) {
-            sendBBNotificationAsCollabNotifications(room_name, user_name, subject, body, level, selected_roles, all_selected, center.lon, center.lat, map.zoom)
+            sendBBNotificationAsCollabNotifications(room_name, user_name, subject, body, level, selected_roles, all_selected, center.lon, center.lat, map.zoom);
         }
         
         $('#bb_map_create_notification_subject').val('');

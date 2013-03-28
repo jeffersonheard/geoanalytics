@@ -28,13 +28,8 @@
         var user_name = "{{ username }}";
         var api_key = "{{ api_key.key }}";
 
-        var BB
+        var BB;
         
-        {# Get CollabNotifications app urls if they exist, otherwise just blank. #}
-        {% url api_dispatch_list resource_name="notificationtype" api_name="collabnotifications" as collabnotifications_notificationtype %}
-        var collabnotifications_api_notificationtype = '{{collabnotifications_notificationtype}}';
-        {% url api_dispatch_list resource_name="notification" api_name="collabnotifications" as collabnotifications_notification %}
-        var collabnotifications_api_notification = '{{collabnotifications_notification}}';
         var bb_api_enter_room =         '{% url bigboard-room %}';
     </script>
 

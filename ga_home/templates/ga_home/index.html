@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block meta_title %}RENCI Geoanalytics{% endblock %}
+{% block title %}Geoanalytics{% endblock %}
+
+{% block breadcrumb_menu %}
+<li class="active">{% trans "Home" %}</li>
+{% endblock %}
+
+{% block left_panel %}
+<div class="panel">
+    <ul class="nav nav-pills nav-stacked">
+        <li><a href="/admin/">Admin</a></li>
+        <li><a href="/account/update/">My Profile</a></li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block main %}
+{% blocktrans %}
+<div class='hero-unit'>
+    This is <a href='http://www.renci.org'>RENCI's</a> Geoanalytics
+    cyberinfrastructure portal.  Geoanalytics is a platform for publishing
+    data, analytics, and applications with a geographical or spatiotemporal
+    component.  
+</div>
+{% endblocktrans %}
+{% endblock %}

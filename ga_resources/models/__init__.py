@@ -1,64 +1,50 @@
-from django.template.defaultfilters import slugify
-from django.utils.timezone import now
+from mezzanine.pages.models import Page
+from mezzanine.core.models import RichText
 from django.contrib.gis.db import models
-from django.contrib.auth.models import User, Group
 from ga_irods.models import RodsEnvironment
 
-class SlugifiedModel(models.Model):
-    """Slugifies name upon save"""
-    name = models.CharField(max_length=255, db_index=True)
-    slug = models.SlugField()
-
-    def save(self, force_insert=False, force_update=False, using=None):
-        if not self.id:
-            self.slug = slugify(self.name)
-
-    class Meta:
-        abstract = True
+from ga_resources.managers import GeoPageManager
 
 
-class DataResource(models.Model):
+class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
     UPLOADED = 1
     URL = 2
     IRODS = 3
 
-    name = models.CharField(max_length=255, db_index=True)
-    slug = models.SlugField()
     method = models.PositiveSmallIntegerField(default=UPLOADED, choices=(
         (UPLOADED, 'uploaded'),
         (URL, 'url'),
         (IRODS, 'irods')
     ))
     resource_file = models.FileField(upload_to='ga_resources', null=True)
-    resource_url = models.URLField(null=True)
-    resource_irods_env = models.ForeignKey(RodsEnvironment, null=True)  # if this is not null, we use ga_irods to access
-    resource_irods_file = models.FilePathField(null=True)
-    owner = models.ForeignKey(User)
-    timestamp = models.DateTimeField(default=now, db_index=True)
-    time_represented = models.DateTimeField(null=True, db_index=True)
-    access_groups = models.ManyToManyField(Group, related_name='data_resource_access_groups', null=True)
-    modify_groups = models.ManyToManyField(Group, related_name='data_resource_modify_groups', null=True)
-    anonymous_read = models.BooleanField(default=True)  # if this is true, then anyone can read
+    resource_url = models.URLField(null=True, blank=True)
+    resource_irods_env = models.ForeignKey(RodsEnvironment, null=True, blank=True)  # if this is not null, we use ga_irods to access
+    resource_irods_file = models.FilePathField(null=True, blank=True)
+    time_represented = models.DateTimeField(null=True, db_index=True, blank=True)
     perform_caching = models.BooleanField(default=True)  # if this is true, then data will be cached
-    cache_ttl = models.PositiveIntegerField(default=10)  # if we perform caching, then this is how long in seconds
+    cache_ttl = models.PositiveIntegerField(default=10, blank=True, null=True)  # if we perform caching, then this is how long in seconds
     data_cache = models.FilePathField(null=True, blank=True)
-    bounding_box = models.PolygonField(null=True, srid=4326)
-    kind = models.CharField(max_length=24, default='vector', choices=(()))
+    bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
+    kind = models.CharField(max_length=24, default='vector', choices=(('vector','Vector'),('raster','Raster')))
     driver = models.CharField(default='ga_resources.drivers.ogr', max_length=255, null=False, blank=False)
 
+    objects = GeoPageManager()
 
-class ResourceGroup(models.Model):
+
+class OrderedResource(models.Model):
+    resource_group = models.ForeignKey("ResourceGroup")
+    data_resource = models.ForeignKey(DataResource)
+    ordering = models.IntegerField(default=0)
+
+class ResourceGroup(Page):
     """Represents a group of resources, which is possibly a time series"""
-    resources = models.ManyToManyField(DataResource, blank=True)
-    name = models.CharField(max_length=255, db_index=True)
-    slug = models.SlugField()
+    resources = models.ManyToManyField(DataResource, blank=True, through=OrderedResource)
     is_timeseries = models.BooleanField(default=False)
     min_time = models.DateTimeField(null=True)
     max_time = models.DateTimeField(null=True)
 
-
-class AncillaryResource(models.Model):
+class AncillaryResource(Page):
     """Represents a file that can be joined onto a vector resource"""
     resource_file = models.FileField(upload_to='ga_resources')
     sqlite_cache = models.FilePathField(null=True)
@@ -67,8 +53,8 @@ class AncillaryResource(models.Model):
     local_key = models.CharField(max_length=64)
 
 
-class Style(models.Model):
-    """An XML stylesheet in Mapnik format for WMS or WMTS output
+class Style(Page):
+    """An XML stylesheet in MML format for WMS or WMTS output
 
     OR
 
@@ -105,17 +91,13 @@ class Style(models.Model):
       ]
     }
     """
-    name = models.CharField(max_length=255, db_index=True)
     legend = models.ImageField(upload_to='ga_resources.styles.legends')
-    slug = models.SlugField()
     stylesheet_file = models.FileField(upload_to='ga_resources.styles')
 
 
-class StyleTemplate(models.Model):
+class StyleTemplate(Page):
     """A template stylesheet in Python Template format for quickly creating styles from well-known styles. """
-    name = models.CharField(max_length=255, db_index=True)
-    slug = models.SlugField()
-    stylesheet_file = models.FileField(upload_to='ga_resources.style_templates')
+    stylesheet = models.TextField()
 
 
 class StyleTemplateVariable(models.Model):
@@ -130,51 +112,27 @@ class StyleTemplateVariable(models.Model):
     default_value = models.CharField(max_length=255, blank=True)
 
 
-class LayerGroup(models.Model):
-    """A way to group layers into separate virtual services to keep capabilites responses from being too long"""
-    name = models.CharField(max_length=255, blank=False, db_index=True)
-    slug = models.SlugField()
-    abstract = models.TextField()
-
-
-class Layer(models.Model):
+class RenderedLayer(Page, RichText):
     """All the general stuff for a layer.  Layers inherit ownership and group info from the data resource"""
-    layer_group = models.ForeignKey(LayerGroup)
-    name = models.CharField(max_length=255, blank=False, unique=True, db_index=True)
-    slug = models.SlugField()
-    title = models.TextField()
-    abstract = models.TextField()
     data_resource = models.ForeignKey(DataResource)
-
-    class Meta:
-        abstract = True
-
-
-class WMSLayer(Layer):
-    """A WMS layer"""
-    default_style = models.ForeignKey(Style, related_name='default_wms_layer')
-    styles = models.ManyToManyField(Style, related_name='wms_layer')
+    default_style = models.ForeignKey(Style, related_name='default_for_layer')
+    styles = models.ManyToManyField(Style)
 
 
-class WMVSLayer(Layer):
-    """Similar to WMS but for an animation of a timeseries"""
-    default_style = models.ForeignKey(Style, related_name='default_wmvs_layer')
-    styles = models.ManyToManyField(Style, related_name='wmvs_layer')
+class RasterResourceLayer(Page, RichText):
+    """A raw raster resource as might be retrieved via WCS"""
+    data_resource = models.ForeignKey(DataResource)
+    styled_layer = models.ForeignKey(RenderedLayer, null=True, blank=True)
 
 
-class WMTSLayer(Layer):
-    """A tiled map service layer"""
-    default_style = models.ForeignKey(Style, related_name='default_wmts_layer')
-    styles = models.ManyToManyField(Style, related_name='wmts_layer')
+class VectorResourceLayer(Page, RichText):
+    """A raw vector resource as might be retrieved via WFS"""
+    data_resource = models.ForeignKey(DataResource)
+    styled_layer = models.ForeignKey(RenderedLayer, null=True, blank=True)
 
 
-class WFSLayer(Layer):
-    """A WFS layer"""
-
-
-class WCSLayer(Layer):
-    """A WCS layer"""
-
-
-class SOSLayer(Layer):
-    """A sensor observation service layer"""
+class AnimatedResourceLayer(Page, RichText):
+    """A rendered animated resource similar to WMS, but renderable to animated gif of mkv"""
+    data_resource = models.ForeignKey(DataResource)
+    default_style = models.ForeignKey(Style, related_name='default_for_animation')
+    styles = models.ManyToManyField(Style)

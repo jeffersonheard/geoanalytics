@@ -1,0 +1,14 @@
+{% extends "pages/page.html" %}
+
+{% load mezzanine_tags %}
+{% load comment_tags %}
+{% load rating_tags %}
+
+{% block main %}{{ block.super }}
+    {% editable page.annotationpage.content %}
+        {{ page.annotationpage.content|richtext_filter|safe }}
+    {% endeditable %}
+
+    {% rating_for page %}
+    {% comments_for page.annotationpage %}
+{% endblock %}

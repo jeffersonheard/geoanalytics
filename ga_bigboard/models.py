@@ -1,6 +1,12 @@
+from django.db.models.signals import post_save
 from django.contrib.gis.db import models as m
 from django.contrib.gis.geos import Point
 from django.contrib.auth.models import User
+from mezzanine.pages.models import Page
+from mezzanine.core.models import RichText
+from mezzanine.generic.fields import CommentsField, RatingField
+
+
 
 class Role(m.Model):
     #: the role name
@@ -193,6 +199,23 @@ class Annotation(m.Model):
     def __unicode__(self):
         return self.room.name + '@' + self.when.strftime('%Y-%M-%d %h:%m')
 
+class AnnotationPage(Page, RichText):
+    annotation = m.OneToOneField(
+        'Annotation',null=True
+    )
+    comments = CommentsField()
+
+def create_page_for_ann(sender, instance, created, *args, **kwargs):
+    """Post-save signal for ensuring AnnotationPage exists"""
+    if created:
+        AnnotationPage.objects.get_or_create(
+            annotation=instance,
+            in_menus=False,
+            title=instance.text
+        )
+
+post_save.connect(create_page_for_ann, sender=Annotation)
+
 
 class Chat(m.Model):
     """A chat message"""
@@ -224,6 +247,7 @@ class Chat(m.Model):
 
     class Meta:
         ordering = ['when']
+
 
 
 class PersonalView(m.Model):

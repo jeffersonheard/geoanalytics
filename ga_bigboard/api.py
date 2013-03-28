@@ -1,6 +1,7 @@
 from django.contrib.gis.geos.geometry import GEOSGeometry
 from django.db.models import Q
-from tastypie.resources import ModelResource, ALL, ALL_WITH_RELATIONS
+from tastypie.contrib.gis.resources import ModelResource
+from tastypie.resources import ALL, ALL_WITH_RELATIONS
 from tastypie import fields as f
 from tastypie.api import Api
 from tastypie.authentication import ApiKeyAuthentication
@@ -8,7 +9,8 @@ from tastypie.authorization import Authorization
 from ga_ows.tastyhacks import Base64FileField
 from ga_bigboard import models
 from django.contrib.auth.models import User
-from ga_ows.tastyhacks import GeoResource
+
+
 
 class WriteOnlyMineAuthorization(Authorization):
     def __init__(self, user_getter=None):
@@ -96,7 +98,7 @@ class OverlayResource(ModelResource):
         }
 
 
-class RoomResource(GeoResource):
+class RoomResource(ModelResource):
     base_layer_wms = f.ForeignKey(to=OverlayResource, attribute='base_layer_wms', full=True, null=True)
     owner = f.ForeignKey(UserResource, 'owner')
     roles = f.ManyToManyField(RoleResource, 'roles')
@@ -117,14 +119,29 @@ class RoomResource(GeoResource):
         return super(RoomResource, self).obj_create(bundle, request, owner=request.user)
 
 
+class AnnotationPage(ModelResource):
+    annotation = f.OneToOneField("Annotation", 'annotation', full=False, null=True)
+    class Meta:
+        authentication = ApiKeyAuthentication()
+        authorization = Authorization()
+        resource_name = 'annotationpage'
+        allowed_methods = ('get','put')
+        queryset = models.AnnotationPage.objects.all()
+        filtering = {
+            'annotation' : ALL_WITH_RELATIONS
+        }
 
-class AnnotationResource(GeoResource):
+    def obj_create(self, bundle, request=None, **kwargs):
+        return super(AnnotationPage, self).obj_create(bundle, request, user=request.user)
+
+class AnnotationResource(ModelResource):
     room = f.ForeignKey(RoomResource, 'room')
     user = f.ForeignKey(UserResource, 'user')
     image = Base64FileField("image", null=True)
     video = Base64FileField("video", null=True)
     audio = Base64FileField("audio", null=True)
     media = Base64FileField("media", null=True)
+    #annotationpage = f.OneToOneField("AnnotationPage", 'annotationpage', full=True, null=True)
 
     class Meta:
         authentication = ApiKeyAuthentication()
@@ -138,9 +155,8 @@ class AnnotationResource(GeoResource):
             'geometry' : ALL
         }
 
-    def obj_create(self, bundle, request=None, **kwargs):
-        #bundle.data['geometry'] = GEOSGeometry(bundle.data['geometry'])
-        return super(AnnotationResource, self).obj_create(bundle, request, user=request.user)
+    def obj_create(self, bundle, **kwargs):
+        return super(AnnotationResource, self).obj_create(bundle, user=bundle.request.user)
 
 
 class SharedOverlayResource(ModelResource):
@@ -163,7 +179,7 @@ class SharedOverlayResource(ModelResource):
             'shared_with_roles' : ALL_WITH_RELATIONS
         }
 
-class ParticipantResource(GeoResource):
+class ParticipantResource(ModelResource):
     room = f.ForeignKey(to=RoomResource, attribute='room')
     user = f.ForeignKey(to=UserResource, attribute='user', full=True)
     roles = f.ManyToManyField(to=RoleResource, attribute='roles', full=True)
@@ -182,7 +198,7 @@ class ParticipantResource(GeoResource):
         return super(ParticipantResource, self).obj_create(bundle, request, user=request.user.pk)
 
 
-class ChatResource(GeoResource):
+class ChatResource(ModelResource):
     room = f.ForeignKey(to=RoomResource, attribute='room')
     user = f.ForeignKey(to=UserResource, attribute='user')
     at = f.ManyToManyField(to=UserResource, attribute='at')
@@ -203,7 +219,7 @@ class ChatResource(GeoResource):
         return super(ChatResource, self).obj_create(bundle, request, user=request.user)
 
 
-class PersonalViewResource(GeoResource):
+class PersonalViewResource(ModelResource):
     room = f.ForeignKey(to=RoomResource, attribute='room')
     user = f.ForeignKey(to=UserResource, attribute='user')
     
@@ -224,7 +240,7 @@ class PersonalViewResource(GeoResource):
         return super(PersonalViewResource, self).obj_create(bundle, request, user=request.user)
 
 
-class BBNotificationsResource(GeoResource):
+class BBNotificationsResource(ModelResource):
     room = f.ForeignKey(to=RoomResource, attribute='room')
     user = f.ForeignKey(to=UserResource, attribute='user')
     shared_with_roles = f.ManyToManyField(RoleResource, 'shared_with_roles')
@@ -286,6 +302,7 @@ class BBNotificationsResource(GeoResource):
 api_v4 = Api('v4')
 api_v4.register(UserResource())
 api_v4.register(RoleResource())
+api_v4.register(AnnotationPage())
 api_v4.register(AnnotationResource())
 api_v4.register(OverlayResource())
 api_v4.register(SharedOverlayResource())

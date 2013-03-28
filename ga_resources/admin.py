@@ -1,3 +1,5 @@
+from copy import deepcopy
+from mezzanine.pages.admin import PageAdmin
 from django.contrib.gis import admin
 from ga_resources.models import *
 
@@ -5,16 +7,27 @@ from ga_resources.models import *
 # class ArticleAdmin(admin.ModelAdmin):
 #   prepopulated_fields = {"slug": ("title",)}
 
-admin.site.register(AncillaryResource)
-admin.site.register(DataResource)
-admin.site.register(LayerGroup)
-admin.site.register(Style)
-admin.site.register(StyleTemplate)
-admin.site.register(StyleTemplateVariable)
-admin.site.register(WCSLayer)
-admin.site.register(WFSLayer)
-admin.site.register(WMSLayer)
-admin.site.register(WMTSLayer)
-admin.site.register(WMVSLayer)
-admin.site.register(SOSLayer)
 
+class OSMPageAdmin(admin.OSMGeoAdmin):
+    fieldsets = deepcopy(PageAdmin.fieldsets)
+
+class DataResourceAdmin(admin.OSMGeoAdmin):
+    fieldsets = deepcopy(PageAdmin.fieldsets) + ((None, {"fields" : (
+        'content',
+        "resource_file", "resource_url", "resource_irods_env", "resource_irods_file",
+        "time_represented","perform_caching","cache_ttl","data_cache","bounding_box","kind","driver"
+    )}),)
+
+admin.site.register(DataResource, DataResourceAdmin)
+admin.site.register(ResourceGroup, PageAdmin)
+admin.site.register(OrderedResource)
+
+admin.site.register(AncillaryResource, PageAdmin)
+admin.site.register(AnimatedResourceLayer, PageAdmin)
+admin.site.register(RasterResourceLayer, PageAdmin)
+admin.site.register(VectorResourceLayer, PageAdmin)
+
+admin.site.register(RenderedLayer, PageAdmin)
+admin.site.register(Style, PageAdmin)
+admin.site.register(StyleTemplate, PageAdmin)
+admin.site.register(StyleTemplateVariable)
