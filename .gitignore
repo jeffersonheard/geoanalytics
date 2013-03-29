@@ -8,3 +8,5 @@ dist/
 *.egg-info/
 doc/build/*
 .idea/
+__MACOSX
+static/media/

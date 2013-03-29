@@ -28,6 +28,7 @@ class DataResource(Page, RichText):
     bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
     kind = models.CharField(max_length=24, default='vector', choices=(('vector','Vector'),('raster','Raster')))
     driver = models.CharField(default='ga_resources.drivers.ogr', max_length=255, null=False, blank=False)
+    native_srs = models.TextField(null=True, blank=True)
 
     objects = GeoPageManager()
 
@@ -91,8 +92,10 @@ class Style(Page):
       ]
     }
     """
-    legend = models.ImageField(upload_to='ga_resources.styles.legends')
-    stylesheet_file = models.FileField(upload_to='ga_resources.styles')
+    legend = models.ImageField(upload_to='ga_resources.styles.legends', width_field='legend_width', height_field='legend_height', null=True, blank=True)
+    legend_width = models.IntegerField(null=True, blank=True)
+    legend_height = models.IntegerField(null=True, blank=True)
+    stylesheet = models.TextField()
 
 
 class StyleTemplate(Page):

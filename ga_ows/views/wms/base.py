@@ -2,9 +2,21 @@ from bson import Binary
 from django.http import HttpResponse
 from django.shortcuts import render_to_response
 import json
-import scipy.misc
-import cairo
+
+try:
+    import scipy.misc
+    HAVE_SCIPY = True
+except ImportError:
+    HAVE_SCIPY = False
+
+try:
+    import cairo
+    HAVE_CAIRO = True
+except ImportError:
+    HAVE_CAIRO = False
+
 from datetime import datetime
+from cStringIO import StringIO
 import pymongo
 import hashlib
 
@@ -250,7 +262,7 @@ class WMSAdapterBase(object):
         """
         raise NotImplementedError("Must implement nativesrs to avoid being abstract")
 
-    def nativebbox(self):
+    def nativebbox(self, layer=None):
         """**REQUIRED** for GetCapabilities The bounding box of the layer in the native SRS.
         :return: A tuple or list of (minx, miny, maxx, maxy)
         """
@@ -321,7 +333,7 @@ class GetMapMixin(common.OWSMixinBase):
         bbox = utils.BBoxField()
         width = f.IntegerField()
         height =f.IntegerField()
-        styles = f.CharField(required=False)
+        styles = utils.MultipleValueField(required=False)
         format = f.CharField()
         bgcolor = f.CharField(required=False)
         transparent = f.BooleanField(required=False)
@@ -339,7 +351,7 @@ class GetMapMixin(common.OWSMixinBase):
             request['bbox'] = request.get('bbox')
             request['width'] = int( request.get('width') )
             request['height'] = int( request.get('height') )
-            request['styles'] = request.get('styles')
+            request['styles'] = request.get('styles').split(',')
             request['format'] = request.get('format', 'png')
             request['bgcolor'] = request.get('bgcolor')
             request['transparent'] = request.get('transparent', False) == 'true'
@@ -361,16 +373,16 @@ class GetMapMixin(common.OWSMixinBase):
             raise common.MissingParameterValue.at('elevation')
 
         if parms['format'].startswith('image/'):
-            format = parms['format'][len('image/'):]
+            fmt = parms['format'][len('image/'):]
         else:
-            format = parms['format']
+            fmt = parms['format']
 
         if self.task:
             ret = self.task.delay(parms).get()
         else:
-            filter = None
+            fltr = None
             if parms['filter']:
-                filter = json.loads(parms['filter'])
+                fltr = json.loads(parms['filter'])
 
             ds = self.adapter.get_2d_dataset(
                 layers=parms['layers'],
@@ -384,46 +396,77 @@ class GetMapMixin(common.OWSMixinBase):
                 time=parms['time'],
                 elevation=parms['elevation'],
                 v=parms['v'],
-                filter = filter
+                filter = fltr,
+                format = fmt.encode('ascii')
             )
 
             tmp = None
+            ret = None
+
+            # this codepath is officially confusing.  Here's the deal.  We have several different ways of returning
+            # datasets that ga_wms can handle.
+            # We can A: return a GDAL dataset.  This will be written to a tempfile and passed to the requestor.
+            #
+            # B: return a filename.  This is assumed to already be in the proper format.  If it's not, you're going to
+            # confuse a bunch of people
+            #
+            # C: return a numpy array in which case scipy is asked to handle it through "imsave"
+            #
+            # D: return a file or StringIO instance.  This is also already assumed to be in the proper format
+            #
+            # All these cases are handled properly by the below code, HOWEVER, as it stands right now if you return
+            # filenames, files, or StringIO isntances, we assume that you're caching them yourself.  Otherwise why would
+            # you have handed us a real file?
+
             if not isinstance(ds, gdal.Dataset): # then it == a Cairo imagesurface or numpy array, or at least... it'd BETTER be
-                if isinstance(ds,cairo.Surface):
+                if HAVE_CAIRO and isinstance(ds,cairo.Surface):
                     tmp = tempfile.NamedTemporaryFile(suffix='.png')
                     ds.write_to_png(tmp.name)
                     ds = gdal.Open(tmp.name)
                     # TODO add all the appropriate metadata from the request into the dataset if this == being returned as a GeoTIFF
-                else:
+                elif isinstance(ds, file):
+                    ret = ds
+                elif isinstance(ds, StringIO):
+                    ret = ds
+
+                elif isinstance(ds, basestring):
+                    try:
+                        ret = open(ds)
+                    except IOError:
+                        if HAVE_SCIPY:
+                            tmp = tempfile.NamedTemporaryFile(suffix='.tif')
+                            scipy.misc.imsave(tmp.name, ds)
+                            ds = gdal.Open(tmp.name)
+                            # TODO add all the appropriate metadata from the request into the dataset if this == being returned as a GeoTIFF
+                elif HAVE_SCIPY:
                     tmp = tempfile.NamedTemporaryFile(suffix='.tif')
                     scipy.misc.imsave(tmp.name, ds)
                     ds = gdal.Open(tmp.name)
                     # TODO add all the appropriate metadata from the request into the dataset if this == being returned as a GeoTIFF
 
-            if format == 'tiff' or format == 'geotiff':
-                driver = gdal.GetDriverByName('GTiff')
-            elif format == 'jpg' or format == 'jpeg':
-                driver = gdal.GetDriverByName('jpeg')
-            elif format == 'jp2k' or format == 'jpeg2000':
-                tmp = tempfile.NamedTemporaryFile(suffix='.jp2')
-                driver = gdal.GetDriverByName('jpeg2000')
-            else:
-                driver = gdal.GetDriverByName(format.encode('ascii'))
+            if not ret:
+                if fmt == 'tiff' or fmt == 'geotiff':
+                    driver = gdal.GetDriverByName('GTiff')
+                elif fmt == 'jpg' or fmt == 'jpeg':
+                    driver = gdal.GetDriverByName('jpeg')
+                elif fmt == 'jp2k' or fmt == 'jpeg2000':
+                    tmp = tempfile.NamedTemporaryFile(suffix='.jp2')
+                    driver = gdal.GetDriverByName('jpeg2000')
+                else:
+                    driver = gdal.GetDriverByName(fmt.encode('ascii'))
 
-            try:
-                tmp = tempfile.NamedTemporaryFile(suffix='.' + format)
-                ds2 = driver.CreateCopy(tmp.name, ds)
-                del ds2
-                tmp.seek(0)
-                ret = tmp.read()
-                self.adapter.cache_result(ret, **parms)
-            except Exception as ex:
-                del tmp
-                raise common.NoApplicableCode(str(ex))
+                try:
+                    tmp = tempfile.NamedTemporaryFile(suffix='.' + fmt)
+                    ds2 = driver.CreateCopy(tmp.name, ds)
+                    del ds2
+                    tmp.seek(0)
+                    ret = tmp.read()
+                    self.adapter.cache_result(ret, **parms)
+                except Exception as ex:
+                    del tmp
+                    raise common.NoApplicableCode(str(ex))
 
-
-
-        return HttpResponse(ret, mimetype=format)
+        return HttpResponse(ret, mimetype=fmt)
 
 
 class GetFeatureInfoMixin(common.OWSMixinBase):
@@ -549,7 +592,7 @@ class WMS(
         { "name" : "GetValidTimes", "formats" : ['json']},
         { "name" : "GetValidVersions", "formats" : ['json']},
         { "name" : "GetValidTimes", "formats" : ['json']},
-        ]
+    ]
 
     #: The title of the service
     title = "Geoanalytics WMS"
