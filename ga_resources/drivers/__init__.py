@@ -10,8 +10,7 @@ from django.conf import settings as s
 import sh
 
 def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
-    # TODO bgcolor unsupported.  Things are always transparent
-    # TODO this can be made general.  All we really need to do is make each individual layer tell us what driver it's using for mapnik.
+    # FIXME this only occurs once.  We have to delete the style files associated with the stylenames somehow.
 
     d = OrderedDict(layers=layers, srs=srs, styles=styles, bgcolor=bgcolor, transparent=transparent)
     shortname = md5()
@@ -73,23 +72,26 @@ def compile_mapfile(name, srs, stylesheets, *layers):
 
 
 def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
-    m = mapnik.Map(width, height)
-
     if srs.lower().startswith('epsg'):
+        if srs.endswith("900913"):
+            srs = srs[:-6] + '3857'
         srs = "+init=" + srs.lower()
-        
+
     name = prepare_wms(layers, srs, styles, **kwargs)
-    filename = "{name}.{bbox}.{width}x{height}.{fmt}".format(
+    filename = md5()
+
+    filename.update("{bbox}.{width}x{height}".format(
         name=name,
         bbox=','.join(str(b) for b in bbox),
         width=width,
         height=height,
         fmt=fmt
-    )
-
+    ))
+    filename = name + filename.hexdigest() + '.' + fmt
+    m = mapnik.Map(width, height)
     mapnik.load_map(m, name + '.xml')
     m.zoom_to_box(mapnik.Box2d(*bbox))
-    mapnik.render_to_file(m, name + '.' + fmt, fmt)
+    mapnik.render_to_file(m, filename, fmt)
 
-    return name + '.' + fmt
+    return filename
 

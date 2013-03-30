@@ -3,10 +3,11 @@
 {% load mezzanine_tags %}
 
 {% block main %}{{ block.super }}
-    <h3>Description</h3>
     {% editable page.dataresource.content %}
         {{ page.dataresource.content|richtext_filter|safe }}
     {% endeditable %}
+
+    <hr>
 
     <h3>Layer boundaries</h3>
     <div id="map" style='width: 600px;'></div>
@@ -15,7 +16,7 @@
     <h3>Geographic web-services for this resource</h3>
     <h5><a href="{{ page.dataresource.resource_file.url }}">Download the original resource file.</a></h5>
 
-    {% if page.dataresource.rasterresourcelayer_set.exists %}
+    {% if page.dataresource.rasterlayer_set.exists %}
         <dl>
             <dt>WCS</dt>
             <dd>
@@ -26,37 +27,37 @@
                 </ul>
             </dd>
         </dl>
-    {% elif page.dataresource.vectorresourcelayer_set.exists %}
+    {% elif page.dataresource.vectorlayer_set.exists %}
         <dl>
             <dt>WFS</dt>
             <dd>
                 <ul>
-                    {% for service in page.dataresource.vectorresourcelayer_set.all %}
+                    {% for service in page.dataresource.vectorlayer_set.all %}
                         <li><a href="{{ service.get_absolute_url }}">{{ service.title }}</a></li>
                     {% endfor %}
                 </ul>
             </dd>
         </dl>
-    {% elif page.dataresource.renderedresourcelayer_set.exists %}
+    {% elif page.dataresource.renderedlayer_set.exists %}
         <dl>
             <dt>WMS</dt>
             <dd>
                 <ul>
-                    {% for service in page.dataresource.renderedresourcelayer_set.all %}
+                    {% for service in page.dataresource.renderedlayer_set.all %}
                         <li><a href="{{ service.get_absolute_url }}">{{ service.title }}</a></li>
                     {% endfor %}
                 </ul>
             </dd>
-            <dt>WMTS {% if page.dataresource.perform_caching %}(cached){% endif %}</dt>
+            {% comment %}<dt>WMTS {% if page.dataresource.perform_caching %}(cached){% endif %}</dt>
             <dd>
                 <ul>
-                    {% for service in page.dataresource.renderedresourcelayer_set.all %}
+                    {% for service in page.dataresource.renderedlayer_set.all %}
                         <li><a href="{{ service.get_absolute_url }}">{{ service.title }}</a></li>
                     {% endfor %}
                 </ul>
-            </dd>
+            </dd>{% endcomment %}
         </dl>
-    {% elif page.dataresource.animatedresourcelayer_set.exists %}
+    {% elif page.dataresource.animatedlayer_set.exists %}
         <dl>
             <dt>WMVS</dt>
             <dd>
@@ -120,7 +121,7 @@
     <link rel="stylesheet" href="{{ STATIC_URL }}bootstrap/css/font-awesome.css">
     <style type="text/css">
         #map { width: 100%; height:300px; }
-        .olMap img { max-width: none; }
+        .olMap img { max-width: none; box-shadow: none; }
         .olControlAttribution { position: relative; top: 10px; text-shadow: 1px 1px 2px white, 0 0 1em white, 0 0 0.2em white; }
         .olControlMousePosition { font-weight: bold; text-shadow: 1px 1px 2px white, 0 0 1em white, 0 0 0.2em white;}
     </style>

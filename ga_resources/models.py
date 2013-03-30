@@ -2,6 +2,7 @@ from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
 from django.contrib.gis.db import models
 from ga_irods.models import RodsEnvironment
+import importlib
 
 from ga_resources.managers import GeoPageManager
 
@@ -31,6 +32,13 @@ class DataResource(Page, RichText):
     native_srs = models.TextField(null=True, blank=True)
 
     objects = GeoPageManager()
+
+    def save(self, *args, **kwargs):
+        driver = importlib.import_module(self.driver)
+        driver.compute_fields(self)
+        super(DataResource, self).save(*args, **kwargs)
+
+
 
 
 class OrderedResource(models.Model):
