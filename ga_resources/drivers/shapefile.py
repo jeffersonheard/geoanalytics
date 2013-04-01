@@ -58,12 +58,22 @@ def ready_data_resource(layer, **kwargs):
         elif resource.resource_irods_file:
             pass # TODO figure out how to best support IRODS. I'd rather not copy large resources.
 
-        if ext == '.zip':
-            sh.unzip("-o", cached_filename)
-            sh.mv(sh.glob('*.shp'), cached_basename + '.shp')
-            sh.mv(sh.glob('*.shx'), cached_basename + '.shx')
-            sh.mv(sh.glob('*.dbf'), cached_basename + '.dbf')
-            sh.mv(sh.glob('*.prj'), cached_basename + '.prj')
+        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shp')))
+        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shx')))
+        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.dbf')))
+        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.prj')))
+        sh.unzip("-o", cached_filename, '-d', cache_path)
+        sh.mv(sh.glob(os.path.join(cache_path, '*.shp')), cached_basename + '.shp')
+        sh.mv(sh.glob(os.path.join(cache_path, '*.shx')), cached_basename + '.shx')
+        sh.mv(sh.glob(os.path.join(cache_path, '*.dbf')), cached_basename + '.dbf')
+
+        try:
+            sh.mv(sh.glob(os.path.join(cache_path, '*.prj')), cached_basename + '.prj')
+        except:
+            with open(cached_basename + '.prj', 'w') as f:
+                srs = osr.SpatialReference()
+                srs.ImportFromEPSG(4326)
+                f.write(srs.ExportToWkt())
 
         with open(cached_basename + '.prj') as f:
             crs = osr.SpatialReference()
@@ -82,6 +92,7 @@ def ready_data_resource(layer, **kwargs):
         x04326, y04326, _ = crx.TransformPoint(xmin, ymin)
         x14326, y14326, _ = crx.TransformPoint(xmax, ymax)
         resource.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
+        resource.save()
 
     return cache_path, (resource.slug, resource.native_srs, {'type': 'shape', "file": cached_basename + '.shp'})
 
@@ -115,15 +126,28 @@ def compute_fields(resource, **kwargs):
         if result.ok:
             with open(cached_filename, 'wb') as resource_file:
                 resource_file.write(result.content)
+        else:
+            result.raise_for_status()
     elif resource.resource_irods_file:
         pass # TODO figure out how to best support IRODS. I'd rather not copy large resources.
 
-    if ext == '.zip':
-        sh.unzip("-o", cached_filename)
-        sh.mv(sh.glob('*.shp'), cached_basename + '.shp')
-        sh.mv(sh.glob('*.shx'), cached_basename + '.shx')
-        sh.mv(sh.glob('*.dbf'), cached_basename + '.dbf')
-        sh.mv(sh.glob('*.prj'), cached_basename + '.prj')
+
+    sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shp')))
+    sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shx')))
+    sh.rm('-f', sh.glob(os.path.join(cache_path, '*.dbf')))
+    sh.rm('-f', sh.glob(os.path.join(cache_path, '*.prj')))
+    sh.unzip("-o", cached_filename, '-d', cache_path)
+    sh.mv(sh.glob(os.path.join(cache_path, '*.shp')), cached_basename + '.shp')
+    sh.mv(sh.glob(os.path.join(cache_path, '*.shx')), cached_basename + '.shx')
+    sh.mv(sh.glob(os.path.join(cache_path, '*.dbf')), cached_basename + '.dbf')
+
+    try:
+        sh.mv(sh.glob(os.path.join(cache_path, '*.prj')), cached_basename + '.prj')
+    except:
+        with open(cached_basename + '.prj', 'w') as f:
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(4326)
+            f.write(srs.ExportToWkt())
 
     with open(cached_basename + '.prj') as f:
         crs = osr.SpatialReference()
@@ -142,5 +166,6 @@ def compute_fields(resource, **kwargs):
     x04326, y04326, _ = crx.TransformPoint(xmin, ymin)
     x14326, y14326, _ = crx.TransformPoint(xmax, ymax)
     resource.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
+    resource.save()
 
 

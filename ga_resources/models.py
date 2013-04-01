@@ -1,6 +1,7 @@
 from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
 from django.contrib.gis.db import models
+from django.db.models.signals import post_save
 from ga_irods.models import RodsEnvironment
 import importlib
 
@@ -18,7 +19,7 @@ class DataResource(Page, RichText):
         (URL, 'url'),
         (IRODS, 'irods')
     ))
-    resource_file = models.FileField(upload_to='ga_resources', null=True)
+    resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
     resource_url = models.URLField(null=True, blank=True)
     resource_irods_env = models.ForeignKey(RodsEnvironment, null=True, blank=True)  # if this is not null, we use ga_irods to access
     resource_irods_file = models.FilePathField(null=True, blank=True)
@@ -34,11 +35,14 @@ class DataResource(Page, RichText):
     objects = GeoPageManager()
 
     def save(self, *args, **kwargs):
-        driver = importlib.import_module(self.driver)
-        driver.compute_fields(self)
         super(DataResource, self).save(*args, **kwargs)
 
+def dataresource_post_save(sender, instance, *args, **kwargs):
+    if 'created' in kwargs and kwargs['created']:
+        driver = importlib.import_module(instance.driver)
+        driver.compute_fields(instance)
 
+post_save.connect(dataresource_post_save, sender=DataResource)
 
 
 class OrderedResource(models.Model):

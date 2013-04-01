@@ -1,4 +1,5 @@
 from tastypie.api import Api
+from tastypie.fields import ForeignKey, ManyToManyField
 from tastypie.resources import ModelResource
 from tastypie.authentication import ApiKeyAuthentication
 from tastypie.authorization import Authorization
@@ -70,6 +71,7 @@ class DataResource(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.DataResource.objects.all()
         resource_name = 'data'
+        fields = ['title','status','content','resource_file','resource_url','resource_irods_file','kind','driver']
 
 
 class ResourceGroup(AbstractPageResource):
@@ -128,6 +130,10 @@ class AnimatedResourceLayer(AbstractPageResource):
 
 
 class RenderedLayer(AbstractPageResource):
+    data_resource = ForeignKey(DataResource, 'data_resource')
+    default_style = ForeignKey(Style, 'default_style', related_name='default_for_layer')
+    styles = ManyToManyField(Style, 'styles')
+
     class Meta(BaseMeta):
         queryset = models.RenderedLayer.objects.all()
         resource_name = 'rendered_layer'

@@ -14,7 +14,12 @@
 
 
     <h3>Geographic web-services for this resource</h3>
+
+    {% if page.dataresource.resource_file %}
     <h5><a href="{{ page.dataresource.resource_file.url }}">Download the original resource file.</a></h5>
+    {% elif page.dataresource.resource_url %}
+        <h5><a href="{{ page.dataresource.resource_url }}">Download the original resource file.</a></h5>
+    {% endif %}
 
     {% if page.dataresource.rasterlayer_set.exists %}
         <dl>
