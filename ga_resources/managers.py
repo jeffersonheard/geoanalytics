@@ -13,7 +13,7 @@ class SearchableGeoQuerySet(SearchableQuerySet, GeoQuerySet):
         SearchableQuerySet.__init__(self, model, search_fields=search_fields, **kwargs)
         GeoQuerySet.__init__(self, model, using=self._db)
 
-class GeoPageManager(GeoManager, PageManager):
+class GeoPageManager(PageManager, GeoManager):
     """a combined manager for geo and pages.  this must be used to make the search function work."""
 
     def get_query_set(self):

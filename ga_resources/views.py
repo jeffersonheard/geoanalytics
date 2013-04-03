@@ -21,13 +21,13 @@ class WMSAdapter(wms.WMSAdapterBase):
     def nativesrs(self, layer):
         """Use the resource record to get native SRS"""
         resource = models.RenderedLayer.objects.get(slug=layer).data_resource
-        return resource.native_srs
+        return resource.spatial_metadata.native_srs
 
     def nativebbox(self, layer=None):
         """Use the resource record to get the native bounding box"""
         if layer:
             resource = models.RenderedLayer.objects.get(slug=layer).data_resource
-            return resource.bounding_box.extent
+            return resource.spatial_metadata.native_bounding_box.extent
         else:
             return (-180,-90,180,90)
 
@@ -67,9 +67,9 @@ class WMSAdapter(wms.WMSAdapterBase):
             ret.append(desc)
             desc['name'] = layer.slug
             desc['title'] = layer.title
-            desc['srs'] = layer.data_resource.native_srs
+            desc['srs'] = layer.data_resource.spatial_metadata.native_srs
             desc['queryable'] = True
-            desc['minx'], desc['miny'], desc['maxx'], desc['maxy'] = layer.data_resource.bounding_box.extent  # FIXME this is not native
+            desc['minx'], desc['miny'], desc['maxx'], desc['maxy'] = layer.data_resource.native_bounding_box.extent  # FIXME this is not native
             desc['ll_minx'], desc['ll_miny'], desc['ll_maxx'], desc['ll_maxy'] = layer.data_resource.bounding_box.extent
             desc['styles'] = []
             desc['styles'].append({

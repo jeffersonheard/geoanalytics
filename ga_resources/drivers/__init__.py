@@ -11,6 +11,7 @@ import sh
 
 def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
     # FIXME this only occurs once.  We have to delete the style files associated with the stylenames somehow.
+    # we should check if
 
     d = OrderedDict(layers=layers, srs=srs, styles=styles, bgcolor=bgcolor, transparent=transparent)
     shortname = md5()
@@ -41,7 +42,6 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
             raise RuntimeError(str(e.stderr))
 
     return cache_path
-
 
 def compile_layer(parent, layer_id, srs, **parameters):
     layer = etree.SubElement(parent, "Layer")
