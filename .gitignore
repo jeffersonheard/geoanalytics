@@ -10,3 +10,4 @@ doc/build/*
 .idea/
 __MACOSX
 static/media/
+local_settings.py
