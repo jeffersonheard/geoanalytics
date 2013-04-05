@@ -21,6 +21,8 @@ urlpatterns = patterns("",
     url('^ga_resources/', include('ga_resources.urls')),
     #url('^ga_irods/', include('ga_irods.urls')),
     #url('^ga_ows/', include('ga_ows.urls')),
+    url('^flower/', include('flower.urls')),
+    url('^cera/', include('cera.urls')),
 
     # We don't want to presume how your homepage works, so here are a
     # few patterns you can use to set it up.
@@ -32,7 +34,7 @@ urlpatterns = patterns("",
     # one homepage pattern, so if you use a different one, comment this
     # one out.
 
-    url("^$", direct_to_template, {"template": "ga_home/index.html"}, name="home"),
+    url("^$", direct_to_template, {"template": "index.html"}, name="home"),
 
     # HOMEPAGE AS AN EDITABLE PAGE IN THE PAGE TREE
     # ---------------------------------------------
