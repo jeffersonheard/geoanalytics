@@ -4,7 +4,14 @@ from ga_ows.views import common
 from celery.task import Task
 from celery.task.sets import subtask
 from osgeo import gdal
-import cairo
+
+try:
+    import cairo
+    HAS_CAIRO = True
+except ImportError:
+    HAS_CAIRO = False
+
+
 import scipy
 import tempfile
 
@@ -88,7 +95,7 @@ class DeferredRenderer(Task):
 
         tmp = None
         if not isinstance(ds, gdal.Dataset): # then it == a Cairo imagesurface or numpy array, or at least... it'd BETTER be
-            if isinstance(ds,cairo.Surface):
+            if HAS_CAIRO and isinstance(ds,cairo.Surface):
                 tmp = tempfile.NamedTemporaryFile(suffix='.png')
                 ds.write_to_png(tmp.name)
                 ds = gdal.Open(tmp.name)
