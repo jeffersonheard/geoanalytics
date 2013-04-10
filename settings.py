@@ -353,6 +353,10 @@ try:
 except ImportError:
     pass
 
+try:
+    INSTALLED_APPS += SITE_APPS
+except NameError:
+    pass
 
 ####################
 # DYNAMIC SETTINGS #
