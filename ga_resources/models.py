@@ -2,11 +2,7 @@ from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
 from django.contrib.gis.db import models
 from django.db.models.signals import post_save
-from ga_irods.models import RodsEnvironment
 import importlib
-
-from ga_resources.managers import GeoPageManager
-
 
 class SpatialMetadata(models.Model):
     native_bounding_box = models.PolygonField(null=True)
@@ -18,23 +14,23 @@ class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
     UPLOADED = 1
     URL = 2
-    IRODS = 3
 
     method = models.PositiveSmallIntegerField(default=UPLOADED, choices=(
         (UPLOADED, 'uploaded'),
         (URL, 'url'),
-        (IRODS, 'irods')
     ))
     resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
     resource_url = models.URLField(null=True, blank=True)
-    resource_irods_env = models.ForeignKey(RodsEnvironment, null=True, blank=True)  # if this is not null, we use ga_irods to access
-    resource_irods_file = models.FilePathField(null=True, blank=True)
     time_represented = models.DateTimeField(null=True, db_index=True, blank=True)
     perform_caching = models.BooleanField(default=True)  # if this is true, then data will be cached
     cache_ttl = models.PositiveIntegerField(default=10, blank=True, null=True)  # if we perform caching, then this is how long in seconds
     data_cache = models.FilePathField(null=True, blank=True)
-    driver = models.CharField(default='ga_resources.drivers.ogr', max_length=255, null=False, blank=False)
+    driver = models.CharField(default='ga_resources.drivers.shapefile', max_length=255, null=False, blank=False)
     spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
+
+    @property
+    def driver_instance(self):
+        return importlib.import_module(self.driver).driver(self)
 
 def dataresource_post_save(sender, instance, *args, **kwargs):
     if 'created' in kwargs and kwargs['created']:
@@ -132,22 +128,11 @@ class RenderedLayer(Page, RichText):
     data_resource = models.ForeignKey(DataResource)
     default_style = models.ForeignKey(Style, related_name='default_for_layer')
     styles = models.ManyToManyField(Style)
-
-
-class RasterResourceLayer(Page, RichText):
-    """A raw raster resource as might be retrieved via WCS"""
-    data_resource = models.ForeignKey(DataResource)
-    styled_layer = models.ForeignKey(RenderedLayer, null=True, blank=True)
-
-
-class VectorResourceLayer(Page, RichText):
-    """A raw vector resource as might be retrieved via WFS"""
-    data_resource = models.ForeignKey(DataResource)
-    styled_layer = models.ForeignKey(RenderedLayer, null=True, blank=True)
-
+    cache_seconds = models.PositiveIntegerField(default=60)
 
 class AnimatedResourceLayer(Page, RichText):
     """A rendered animated resource similar to WMS, but renderable to animated gif of mkv"""
     data_resource = models.ForeignKey(DataResource)
     default_style = models.ForeignKey(Style, related_name='default_for_animation')
     styles = models.ManyToManyField(Style)
+    cache_seconds = models.PositiveIntegerField(default=60)

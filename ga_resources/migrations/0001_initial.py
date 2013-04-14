@@ -15,7 +15,6 @@ class Migration(SchemaMigration):
             ('method', self.gf('django.db.models.fields.PositiveSmallIntegerField')(default=1)),
             ('resource_file', self.gf('django.db.models.fields.files.FileField')(max_length=100, null=True)),
             ('resource_url', self.gf('django.db.models.fields.URLField')(max_length=200, null=True, blank=True)),
-            ('resource_irods_env', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['ga_irods.RodsEnvironment'], null=True, blank=True)),
             ('resource_irods_file', self.gf('django.db.models.fields.FilePathField')(max_length=100, null=True, blank=True)),
             ('time_represented', self.gf('django.db.models.fields.DateTimeField')(db_index=True, null=True, blank=True)),
             ('perform_caching', self.gf('django.db.models.fields.BooleanField')(default=True)),

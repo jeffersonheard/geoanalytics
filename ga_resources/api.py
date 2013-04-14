@@ -5,7 +5,6 @@ from tastypie.authentication import ApiKeyAuthentication
 from tastypie.authorization import Authorization
 
 from ga_resources import models
-from ga_irods import models as irods
 from django.contrib.auth import models as auth
 
 
@@ -52,15 +51,6 @@ class User(ModelResource):
         resource_name = "user"
 
 
-class RodsEnvironment(ModelResource):
-    class Meta:
-        authorization = Authorization()
-        authentication = ApiKeyAuthentication()
-        allowed_methods = ['get']
-        queryset = irods.RodsEnvironment.objects.all()
-        resource_name = "irods_environment"
-
-
 class AncillaryResource(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.AncillaryResource.objects.all()
@@ -92,7 +82,6 @@ class ResourceGroup(AbstractPageResource):
 resources = Api()
 resources.register(User())
 resources.register(Group())
-resources.register(RodsEnvironment())
 resources.register(AncillaryResource())
 resources.register(SpatialMetadata())
 resources.register(DataResource())
@@ -122,18 +111,6 @@ styles.register(StyleTemplate())
 styles.register(StyleTemplateVariable())
 
 
-class RasterResourceLayer(AbstractPageResource):
-    class Meta(BaseMeta):
-        queryset = models.RasterResourceLayer.objects.all()
-        resource_name = 'raster_layer'
-
-
-class VectorResourceLayer(AbstractPageResource):
-    class Meta(BaseMeta):
-        queryset = models.VectorResourceLayer.objects.all()
-        resource_name = 'vector_layer'
-
-
 class AnimatedResourceLayer(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.AnimatedResourceLayer.objects.all()
@@ -151,7 +128,5 @@ class RenderedLayer(AbstractPageResource):
 
 
 layers = Api()
-layers.register(RasterResourceLayer())
-layers.register(VectorResourceLayer())
 layers.register(AnimatedResourceLayer())
 layers.register(RenderedLayer())
