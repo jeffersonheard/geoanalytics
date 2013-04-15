@@ -1,5 +1,5 @@
 from tastypie.api import Api
-from tastypie.fields import ForeignKey, ManyToManyField
+from tastypie.fields import ForeignKey, ManyToManyField, OneToOneField
 from tastypie.resources import ModelResource
 from tastypie.authentication import ApiKeyAuthentication
 from tastypie.authorization import Authorization
@@ -66,8 +66,18 @@ class AncillaryResource(AbstractPageResource):
         queryset = models.AncillaryResource.objects.all()
         resource_name = "ancillary"
 
+class SpatialMetadata(ModelResource):
+    class Meta:
+        authorization = Authorization()
+        authentication = ApiKeyAuthentication()
+        allowed_methods = ['get']
+        queryset = models.SpatialMetadata.objects.all()
+        resource_name = 'spatial_metadata'
+
 
 class DataResource(AbstractPageResource):
+    spatial_metadata = OneToOneField(SpatialMetadata, 'spatial_metadata', full=True, null=True, blank=True, readonly=True)
+
     class Meta(BaseMeta):
         queryset = models.DataResource.objects.all()
         resource_name = 'data'
@@ -84,6 +94,7 @@ resources.register(User())
 resources.register(Group())
 resources.register(RodsEnvironment())
 resources.register(AncillaryResource())
+resources.register(SpatialMetadata())
 resources.register(DataResource())
 resources.register(ResourceGroup())
 

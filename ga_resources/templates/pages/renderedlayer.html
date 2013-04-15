@@ -3,7 +3,7 @@
 {% load mezzanine_tags %}
 
 {% block main %}{{ block.super }}
-    <h4>Preview</h3>
+    <h4>Preview</h4>
     <div id="map" style='width: 600px;'></div>
 
     <h4>Description</h4>
@@ -38,7 +38,7 @@
             };
 
             var wkt = new OpenLayers.Format.WKT(in_options);
-            var feature = wkt.read("{{ page.renderedlayer.dataresource.bounding_box.wkt }}");
+            var feature = wkt.read("{{ page.renderedlayer.data_resource.spatial_metadata.bounding_box.wkt }}");
             var bounds = feature.geometry.getBounds();
 
             var wms = new OpenLayers.Layer.WMS('{{ page.renderedlayer.title }}', "/ga_resources/wms/", {

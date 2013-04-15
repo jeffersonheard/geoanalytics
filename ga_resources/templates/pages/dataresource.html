@@ -90,7 +90,7 @@
 
             var bboxLayer = new OpenLayers.Layer.Vector('bbox');
             var wkt = new OpenLayers.Format.WKT(in_options);
-            var feature = wkt.read("{{ page.dataresource.bounding_box.wkt }}");
+            var feature = wkt.read("{{ page.dataresource.spatial_metadata.bounding_box.wkt }}");
             bboxLayer.addFeatures([feature]);
             var bounds = feature.geometry.getBounds();
 

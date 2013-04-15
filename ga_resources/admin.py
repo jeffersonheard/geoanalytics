@@ -8,17 +8,17 @@ from ga_resources.models import *
 #   prepopulated_fields = {"slug": ("title",)}
 
 
-class OSMPageAdmin(admin.OSMGeoAdmin):
-    fieldsets = deepcopy(PageAdmin.fieldsets)
+#class OSMPageAdmin(admin.OSMGeoAdmin):
+#    fieldsets = deepcopy(PageAdmin.fieldsets)
 
-class DataResourceAdmin(admin.OSMGeoAdmin):
-    fieldsets = deepcopy(PageAdmin.fieldsets) + ((None, {"fields" : (
-        'content',
-        "resource_file", "resource_url", "resource_irods_env", "resource_irods_file",
-        "time_represented","perform_caching","cache_ttl","data_cache","bounding_box","kind","driver"
-    )}),)
+#class DataResourceAdmin(admin.OSMGeoAdmin):
+#    fieldsets = deepcopy(PageAdmin.fieldsets) + ((None, {"fields" : (
+#        'content',
+#        "resource_file", "resource_url", "resource_irods_env", "resource_irods_file",
+#        "time_represented","perform_caching","cache_ttl","data_cache","bounding_box","kind","driver"
+#    )}),)
 
-admin.site.register(DataResource, DataResourceAdmin)
+admin.site.register(DataResource, PageAdmin)
 admin.site.register(ResourceGroup, PageAdmin)
 admin.site.register(OrderedResource)
 

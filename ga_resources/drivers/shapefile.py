@@ -37,12 +37,13 @@ def ready_data_resource(layer, **kwargs):
     cached_basename = os.path.join(cache_path, *os.path.split(resource.slug))
     cached_filename = cached_basename + ext
 
-    ready = False
-    if resource.perform_caching and os.path.exists(cached_filename) and ('fresh' not in kwargs or kwargs['fresh'] is False):
-        mtime = os.stat(cache_path).st_mtime
-        now = time.time()
-        if now - mtime < resource.cache_ttl:
-            ready = True
+    #ready = False
+    #if resource.perform_caching and os.path.exists(cached_filename) and ('fresh' not in kwargs or kwargs['fresh'] is False):
+    #    mtime = os.stat(cache_path).st_mtime
+    #    now = time.time()
+    #    if now - mtime < resource.cache_ttl:
+    #        ready = True
+    ready = os.path.exists(cached_filename) # FIXME this must get updated when the cache expires like above, but correctly
 
     if not ready:
         if resource.resource_file:
@@ -75,26 +76,22 @@ def ready_data_resource(layer, **kwargs):
                 srs.ImportFromEPSG(4326)
                 f.write(srs.ExportToWkt())
 
-        with open(cached_basename + '.prj') as f:
-            crs = osr.SpatialReference()
-            crs.ImportFromWkt(f.read())
-            crs = crs.ExportToProj4()
-            resource.native_crs = crs
-
         ds = ogr.Open(cached_basename + '.shp')
         lyr = ds.GetLayerByIndex(0)
         xmin, xmax, ymin, ymax = lyr.GetExtent()
         crs = lyr.GetSpatialRef()
-        resource.native_srs = crs.ExportToProj4()
+        resource.spatial_metadata.native_srs = crs.ExportToProj4()
         e4326 = osr.SpatialReference()
         e4326.ImportFromEPSG(4326)
         crx = osr.CoordinateTransformation(crs, e4326)
         x04326, y04326, _ = crx.TransformPoint(xmin, ymin)
         x14326, y14326, _ = crx.TransformPoint(xmax, ymax)
-        resource.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
+        resource.spatial_metadata.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
+        resource.spatial_metadata.native_bounding_box = Polygon.from_bbox((xmin, ymin, xmax, ymax))
+        resource.spatial_metadata.save()
         resource.save()
 
-    return cache_path, (resource.slug, resource.native_srs, {'type': 'shape', "file": cached_basename + '.shp'})
+    return cache_path, (resource.slug, resource.spatial_metadata.native_srs, {'type': 'shape', "file": cached_basename + '.shp'})
 
 
 def compute_fields(resource, **kwargs):
@@ -122,7 +119,6 @@ def compute_fields(resource, **kwargs):
         os.symlink(os.path.join(s.MEDIA_ROOT, resource.resource_file.name), cached_filename)
     elif resource.resource_url:
         result = requests.get(resource.resource_url)
-        ext = resource.resource_url.split('.')[-1]
         if result.ok:
             with open(cached_filename, 'wb') as resource_file:
                 resource_file.write(result.content)
@@ -149,23 +145,20 @@ def compute_fields(resource, **kwargs):
             srs.ImportFromEPSG(4326)
             f.write(srs.ExportToWkt())
 
-    with open(cached_basename + '.prj') as f:
-        crs = osr.SpatialReference()
-        crs.ImportFromWkt(f.read())
-        crs = crs.ExportToProj4()
-        resource.native_crs = crs
-
     ds = ogr.Open(cached_basename + '.shp')
     lyr = ds.GetLayerByIndex(0)
     xmin, xmax, ymin, ymax = lyr.GetExtent()
     crs = lyr.GetSpatialRef()
-    resource.native_srs = crs.ExportToProj4()
+    resource.spatial_metadata.native_srs = crs.ExportToProj4()
     e4326 = osr.SpatialReference()
     e4326.ImportFromEPSG(4326)
     crx = osr.CoordinateTransformation(crs, e4326)
     x04326, y04326, _ = crx.TransformPoint(xmin, ymin)
     x14326, y14326, _ = crx.TransformPoint(xmax, ymax)
-    resource.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
+    resource.spatial_metadata.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
+    resource.spatial_metadata.native_bounding_box = Polygon.from_bbox((xmin, ymin, xmax, ymax))
+    resource.spatial_metadata.three_d = False
+    resource.spatial_metadata.save()
     resource.save()
 
 

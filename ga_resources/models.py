@@ -8,6 +8,12 @@ import importlib
 from ga_resources.managers import GeoPageManager
 
 
+class SpatialMetadata(models.Model):
+    native_bounding_box = models.PolygonField(null=True)
+    bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
+    three_d = models.BooleanField(default=False)
+    native_srs = models.TextField(null=True, blank=True)
+
 class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
     UPLOADED = 1
@@ -27,18 +33,12 @@ class DataResource(Page, RichText):
     perform_caching = models.BooleanField(default=True)  # if this is true, then data will be cached
     cache_ttl = models.PositiveIntegerField(default=10, blank=True, null=True)  # if we perform caching, then this is how long in seconds
     data_cache = models.FilePathField(null=True, blank=True)
-    bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
-    kind = models.CharField(max_length=24, default='vector', choices=(('vector','Vector'),('raster','Raster')))
     driver = models.CharField(default='ga_resources.drivers.ogr', max_length=255, null=False, blank=False)
-    native_srs = models.TextField(null=True, blank=True)
-
-    objects = GeoPageManager()
-
-    def save(self, *args, **kwargs):
-        super(DataResource, self).save(*args, **kwargs)
+    spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
 
 def dataresource_post_save(sender, instance, *args, **kwargs):
     if 'created' in kwargs and kwargs['created']:
+        instance.spatial_metadata = SpatialMetadata.objects.create()
         driver = importlib.import_module(instance.driver)
         driver.compute_fields(instance)
 
