@@ -21,7 +21,7 @@ urlpatterns = patterns("",
     url('^ga_resources/', include('ga_resources.urls')),
     #url('^ga_irods/', include('ga_irods.urls')),
     #url('^ga_ows/', include('ga_ows.urls')),
-    url('^flower/', include('flower.urls')),
+    #url('^flower/', include('flower.urls')),
     url('^cera/', include('cera.urls')),
 
     # We don't want to presume how your homepage works, so here are a
