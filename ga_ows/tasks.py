@@ -4,8 +4,19 @@ from ga_ows.views import common
 from celery.task import Task
 from celery.task.sets import subtask
 from osgeo import gdal
-import cairo
-import scipy
+
+try:
+    import cairo
+    have_cairo = True
+except ImportError:
+    have_cairo = False
+
+try:
+    import scipy
+    have_scipy = True
+except ImportError:
+    have_scipy = False
+
 import tempfile
 
 class DeferredRenderer(Task):
@@ -87,17 +98,25 @@ class DeferredRenderer(Task):
         )
 
         tmp = None
+        ret = None
         if not isinstance(ds, gdal.Dataset): # then it == a Cairo imagesurface or numpy array, or at least... it'd BETTER be
-            if isinstance(ds,cairo.Surface):
+            if have_cairo and isinstance(ds,cairo.Surface):
                 tmp = tempfile.NamedTemporaryFile(suffix='.png')
                 ds.write_to_png(tmp.name)
                 ds = gdal.Open(tmp.name)
                 # TODO add all the appropriate metadata from the request into the dataset if this == being returned as a GeoTIFF
-            else:
+            elif isinstance(ds, file):
+                ret = ds
+            elif isinstance(ds, StringIO):
+                ret = ds
+            elif have_scipy:
                 tmp = tempfile.NamedTemporaryFile(suffix='.tif')
                 scipy.misc.imsave(tmp.name, ds)
                 ds = gdal.Open(tmp.name)
                 # TODO add all the appropriate metadata from the request into the dataset if this == being returned as a GeoTIFF
+        
+        if ret:
+            return ret
 
         if format == 'tiff' or format == 'geotiff':
             driver = gdal.GetDriverByName('GTiff')

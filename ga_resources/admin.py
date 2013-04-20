@@ -24,8 +24,6 @@ admin.site.register(OrderedResource)
 
 admin.site.register(AncillaryResource, PageAdmin)
 admin.site.register(AnimatedResourceLayer, PageAdmin)
-admin.site.register(RasterResourceLayer, PageAdmin)
-admin.site.register(VectorResourceLayer, PageAdmin)
 
 admin.site.register(RenderedLayer, PageAdmin)
 admin.site.register(Style, PageAdmin)

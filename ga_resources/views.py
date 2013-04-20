@@ -1,8 +1,6 @@
 from ga_ows.views import wfs, wms
 from ga_resources import models, drivers
 
-import importlib
-
 class WMSAdapter(wms.WMSAdapterBase):
     #def get_cache_record(self, layers, srs, bbox, width, height, styles, format, bgcolor, transparent, time, elevation, v, filter, **kwargs):
     #    """see if we already have a cache entry prepared and if so read and return it"""
@@ -12,11 +10,18 @@ class WMSAdapter(wms.WMSAdapterBase):
 
     def get_2d_dataset(self, layers, srs, bbox, width, height, styles, bgcolor, transparent, time, elevation, v, filter, **kwargs):
         """use the driver to render a tile"""
-        return open(drivers.render(kwargs['format'], width, height, bbox, srs, styles, layers))
+        return open(drivers.render(kwargs['format'], width, height, bbox, srs, styles, layers, **kwargs))
 
-    def get_feature_info(self, wherex, wherey, layers, callback, format, feature_count, srs, filter):
+    def get_feature_info(self, wherex, wherey, layers, callback, format, feature_count, srs, filter, fuzziness=0, **kwargs):
         """use the driver to get feature info"""
-        return {} # FIXME write this as soon as possible
+
+        feature_info = {
+            layer : models.RenderedLayer.objects.get(slug=layer).data_resource.driver_instance.get_data_for_point(
+                wherex, wherey, srs, fuzziness=fuzziness, **kwargs
+            )
+        for layer in layers }
+
+        return feature_info
 
     def nativesrs(self, layer):
         """Use the resource record to get native SRS"""

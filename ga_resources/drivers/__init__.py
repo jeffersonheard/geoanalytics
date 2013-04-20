@@ -11,9 +11,16 @@ from django.utils.timezone import utc
 
 class Driver(object):
     """Abstract class that defines a number of reusable methods to load geographic data and create services from it"""
+    def __init__(self, data_resource):
+        self.resource = data_resource
+        self.cache_path = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.resource.slug))
+
+        if not os.path.exists(self.cache_path):
+            os.makedirs(self.cache_path)
+
 
     def ready_data_resource(self, **kwargs):
-        """This should return the path to a data file or directory containing a resource that can be read by Mapnik."""
+        """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
         raise NotImplementedError("Method ready_data_resource not implemented in abstract class")
 
     def compute_fields(self, **kwargs):

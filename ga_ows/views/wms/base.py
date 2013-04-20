@@ -363,6 +363,8 @@ class GetMapMixin(common.OWSMixinBase):
     def GetMap(self, r, kwargs):
         parms = GetMapMixin.Parameters.create(kwargs).cleaned_data
 
+        kwargs = { i : j for i, j in kwargs.items() if i not in parms }
+
         item = self.adapter.get_cache_record(**parms)
         if item and not parms['fresh']:
             return HttpResponse(item, mimetype='image/'+parms['format'])
@@ -397,7 +399,8 @@ class GetMapMixin(common.OWSMixinBase):
                 elevation=parms['elevation'],
                 v=parms['v'],
                 filter = fltr,
-                format = fmt.encode('ascii')
+                format = fmt.encode('ascii'),
+                **kwargs
             )
 
             tmp = None
@@ -491,8 +494,8 @@ class GetFeatureInfoMixin(common.OWSMixinBase):
             request['bbox'] = request.get('bbox')
             request['width'] = int( request.get('width') )
             request['height'] = int( request.get('height') )
-            request['i'] = int( request.get('i') )
-            request['j'] = int( request.get('j') )
+            request['i'] = int( request.get('i', request.get('y')) )
+            request['j'] = int( request.get('j', request.get('x')) )
             request['srs'] = request.get('srs', None)
             request['format'] = request.get('format', 'application/json')
             request['callback'] = request.get('callback', None)
@@ -504,27 +507,32 @@ class GetFeatureInfoMixin(common.OWSMixinBase):
     def GetFeatureInfo(self, r, kwargs):
         parms = GetFeatureInfoMixin.Parameters.create(kwargs).cleaned_data
 
-        x = parms.cleaned_data['i']
-        y = parms.cleaned_data['j']
-        bbox = parms.cleaned_data['bbox']
-        width = parms.cleaned_data['width']*1.0
-        height = parms.cleaned_data['height']*1.0
+        y = parms['i']
+        x = parms['j']
+
+        bbox = parms['bbox']
+        width = parms['width']*1.0
+        height = parms['height']*1.0
 
         wherex = bbox[0] + x/width*(bbox[2]-bbox[0])
-        wherey = bbox[1] + y/height*(bbox[3]-bbox[1])
-        if 'filter' in kwargs:
-            parms.cleaned_data['filter'] = json.loads(kwargs['filter'])
+        wherey = bbox[1] + (height-y)/height*(bbox[3]-bbox[1])
+        if 'filter' in kwargs and kwargs['filter']:
+            parms['filter'] = json.loads(kwargs['filter'])
         else:
-            parms.cleaned_data['filter'] = common.get_filter_params(kwargs)
+            parms['filter'] = common.get_filter_params(kwargs)
 
-        info = self.adapter.get_feature_info(wherex, wherey, **parms.cleaned_data)
+        for k,v in kwargs.items():
+            if k not in parms:
+                parms[k.lower()] = v
+        info = self.adapter.get_feature_info(wherex, wherey, **parms)
 
-        if parms.cleaned_data['callback']:
-            return HttpResponse("{callback}({json})".format(callback=parms.cleaned_data['callback'], json=json.dumps(info)))
-        elif parms.cleaned_data['format'] == 'application/json':
+        if parms['callback']:
+            return HttpResponse("{callback}({json})".format(callback=parms['callback'], json=json.dumps(info)))
+        elif parms['format'] == 'application/json':
             return HttpResponse(json.dumps(info), mimetype='application/json')
         else:
-            raise common.OWSException.at('GetFeatureInfo', "Feature info format not supported")
+            return HttpResponse(json.dumps(info), mimetype='application/json')
+            #raise common.OWSException.at('GetFeatureInfo', "Feature info format not supported")
 
 class GetStylesMixin(common.OWSMixinBase):
     """ TODO: Handle the GetStyles request in WMS.

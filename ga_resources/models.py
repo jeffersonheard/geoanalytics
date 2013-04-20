@@ -35,8 +35,7 @@ class DataResource(Page, RichText):
 def dataresource_post_save(sender, instance, *args, **kwargs):
     if 'created' in kwargs and kwargs['created']:
         instance.spatial_metadata = SpatialMetadata.objects.create()
-        driver = importlib.import_module(instance.driver)
-        driver.compute_fields(instance)
+        instance.driver_instance.compute_fields()
 
 post_save.connect(dataresource_post_save, sender=DataResource)
 

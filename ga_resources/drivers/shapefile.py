@@ -17,9 +17,6 @@ DATA_TYPE = VECTOR
 class ShapefileDriver(Driver):
     DATA_TYPE = VECTOR
 
-    def __init__(self, data_resource):
-        self.resource = data_resource
-
     def ready_data_resource(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
