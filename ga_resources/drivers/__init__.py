@@ -8,16 +8,15 @@ from django.conf import settings as s
 import sh
 from datetime import datetime
 from django.utils.timezone import utc
+import json
+import redis
+
 
 class Driver(object):
     """Abstract class that defines a number of reusable methods to load geographic data and create services from it"""
     def __init__(self, data_resource):
         self.resource = data_resource
-        self.cache_path = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.resource.slug))
-
-        if not os.path.exists(self.cache_path):
-            os.makedirs(self.cache_path)
-
+        self.cache_path = self.resource.cache_path
 
     def ready_data_resource(self, **kwargs):
         """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
@@ -75,36 +74,31 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
         shortname.update(unicode(value))
     cache_entry_basename = shortname.hexdigest()
     cache_path = os.path.join(s.MEDIA_ROOT, '.cache', '_cached_layers')
-
     if not os.path.exists(cache_path):
         os.makedirs(cache_path)  # just in case it's not there yet.
 
-    cache_path = os.path.join(cache_path, cache_entry_basename)
+    cached_filename = os.path.join(cache_path, cache_entry_basename)
+    for style in styles:
+        s.WMS_CACHE_DB.sadd(style, cached_filename)
+    for layer in layers:
+        s.WMS_CACHE_DB.sadd(layer, cached_filename)
 
     layer_specs = []
-    cache_seconds = 2**31
     for layer in layers:
         rendered_layer = m.RenderedLayer.objects.get(slug=layer)
-        cache_seconds = min(rendered_layer.cache_seconds, cache_seconds)
         driver = rendered_layer.data_resource.driver_instance
         _, layer_spec = driver.ready_data_resource(**kwargs)
         layer_specs.append(layer_spec)
 
     stylesheet_objects = [m.Style.objects.get(slug=style) for style in styles]
-    if os.path.exists(cache_path + ".xml"):
-        newest_date = max(style.publish_date for style in stylesheet_objects)
-        xml_date = datetime.utcfromtimestamp(os.stat(cache_path + ".xml").st_mtime).replace(tzinfo=utc)
-        if xml_date < newest_date:
-            sh.rm(sh.glob(cache_path + "*"))
-
-    if not os.path.exists(cache_path + ".xml"):  # not an else as previous clause may remove file.
+    if not os.path.exists(cached_filename + ".xml"):  # not an else as previous clause may remove file.
         stylesheets = [style.stylesheet for style in stylesheet_objects]
         try:
-            compile_mapfile(cache_path, srs, stylesheets, *layer_specs)
+            compile_mapfile(cached_filename, srs, stylesheets, *layer_specs)
         except sh.ErrorReturnCode_1, e:
             raise RuntimeError(str(e.stderr))
 
-    return cache_path
+    return cached_filename
 
 
 def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
@@ -125,10 +119,14 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
         fmt=fmt
     ))
     filename = name + filename.hexdigest() + '.' + fmt
-    m = mapnik.Map(width, height)
-    mapnik.load_map(m, name + '.xml')
-    m.zoom_to_box(mapnik.Box2d(*bbox))
-    mapnik.render_to_file(m, filename, fmt)
+
+    if os.path.exists(filename):
+        return filename
+    else:
+        m = mapnik.Map(width, height)
+        mapnik.load_map(m, name + '.xml')
+        m.zoom_to_box(mapnik.Box2d(*bbox))
+        mapnik.render_to_file(m, filename, fmt)
 
     return filename
 

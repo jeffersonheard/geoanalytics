@@ -3,11 +3,13 @@ from django.conf import settings as s
 from django.contrib.gis.geos import Polygon
 import os
 import sh
-from ga_resources import models as m
 import requests
 from osgeo import osr, ogr
 from . import Driver
 import time
+from pandas import DataFrame
+from shapely import geometry, wkb
+from urllib2 import urlopen
 
 VECTOR = False
 RASTER = True
@@ -36,11 +38,7 @@ class ShapefileDriver(Driver):
         cached_basename = os.path.join(cache_path, os.path.split(self.resource.slug)[-1])
         cached_filename = cached_basename + ext
 
-        ready = False
-        if self.resource.perform_caching and os.path.exists(cached_filename) and ('fresh' not in kwargs or kwargs['fresh'] is False):
-            mtime = os.stat(cache_path).st_mtime
-            now = time.time()
-            ready = now - mtime < self.resource.cache_ttl
+        ready = self.resource.perform_caching and os.path.exists(cached_filename) and ('fresh' not in kwargs or kwargs['fresh'] is False)
 
         if not ready:
             if self.resource.resource_file:
@@ -48,10 +46,16 @@ class ShapefileDriver(Driver):
                     os.unlink(cached_filename)
                 os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
             elif self.resource.resource_url:
-                result = requests.get(self.resource.resource_url)
-                if result.ok:
-                    with open(cached_filename, 'wb') as resource_file:
-                        resource_file.write(result.content)
+                if self.resource.resource_url.startswith('ftp'):
+                    result = urlopen(self.resource.url).read()
+                    if result:
+                        with open(cached_filename, 'wb') as resource_file:
+                            resource_file.write(result)
+                else:
+                    result = requests.get(self.resource.resource_url)
+                    if result.ok:
+                        with open(cached_filename, 'wb') as resource_file:
+                            resource_file.write(result.content)
 
             sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shp')))
             sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shx')))
@@ -111,12 +115,19 @@ class ShapefileDriver(Driver):
                 os.unlink(cached_filename)
             os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
         elif self.resource.resource_url:
-            result = requests.get(self.resource.resource_url)
-            if result.ok:
-                with open(cached_filename, 'wb') as resource_file:
-                    resource_file.write(result.content)
+            if self.resource.resource_url.startswith('ftp'):
+                result = urlopen(self.resource.url).read()
+                if result:
+                    with open(cached_filename, 'wb') as resource_file:
+                        resource_file.write(result)
             else:
-                result.raise_for_status()
+                result = requests.get(self.resource.resource_url)
+                if result.ok:
+                    with open(cached_filename, 'wb') as resource_file:
+                        resource_file.write(result.content)
+                else:
+                    result.raise_for_status()
+
 
         sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shp')))
         sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shx')))
@@ -151,6 +162,10 @@ class ShapefileDriver(Driver):
         self.resource.spatial_metadata.save()
         self.resource.save()
 
+    def get_filename(self, xtn):
+        filename = os.path.split(self.resource.slug)[-1]
+        return os.path.join(self.cache_path, filename + '.' + xtn)
+
     def get_data_fields(self, **kwargs):
         _, (_, _, result) = self.ready_data_resource(**kwargs)
         ds = ogr.Open(result['file'])
@@ -182,5 +197,82 @@ class ShapefileDriver(Driver):
             lyr.SetSpatialFilter(ogr.CreateGeometryFromWkt(wkt))
         return [f.items() for f in lyr]
 
+    def as_dataframe(self):
+        """
+        Creates a dataframe object for a shapefile's main layer using layer_as_dataframe. This object is cached on disk for
+        layer use, but the cached copy will only be picked up if the shapefile's mtime is older than the dataframe's mtime.
+
+        :param shp: The shapefile
+        :return:
+        """
+
+        dfx_path = self.get_filename('dfx')
+        shp_path = self.get_filename('shp')
+        if hasattr(self, '_dataframe'):
+            return self._dataframe
+
+        elif os.path.exists(dfx_path) and os.stat(dfx_path).st_mtime >= os.stat(shp_path).st_mtime:
+            self._df = DataFrame.load(dfx_path)
+            return self._df
+        else:
+            ds = ogr.Open(shp_path)
+            lyr = ds.GetLayerByIndex(0)
+            df= DataFrame.from_records(
+                data=[dict(fid=f.GetFID(), geometry=wkb.loads(f.geometry().ExportToWkb()), **f.items()) for f in lyr],
+                index='fid'
+            )
+            df.save(dfx_path)
+            self._df = df
+            return self._df
+
+    @classmethod
+    def from_dataframe(self, df, shp, srs):
+        """Write an dataframe object out as a shapefile"""
+
+        dtypes = {
+            'int64' : ogr.OFTInteger,
+            'float64' : ogr.OFTReal,
+            'object' : ogr.OFTString
+        }
+        geomTypes = {
+            'GeometryCollection' : ogr.wkbGeometryCollection,
+            'LinearRing' : ogr.wkbLinearRing,
+            'LineString' : ogr.wkbLineString,
+            'MultiLineString' : ogr.wkbMultiLineString,
+            'MultiPoint' : ogr.wkbMultiPoint,
+            'MultiPolygon' : ogr.wkbMultiPolygon,
+            'Point' : ogr.wkbPoint,
+            'Polygon' : ogr.wkbPolygon
+        }
+
+        drv = ogr.GetDriverByName('ESRI Shapefile')
+
+        if os.path.exists(shp):
+            sh.rm('-rf', shp)
+
+        os.mkdir(shp)
+
+        ds = drv.CreateDataSource(shp)
+        keys = df.keys()
+        fieldDefns = [ogr.FieldDefn(name, dtypes[df[name].dtype.name]) for name in keys if name != 'geometry']
+        geomType = geomTypes[df['geometry'][0].type]
+        l = ds.CreateLayer(
+            name=os.path.splitext(os.path.split(shp)[-1])[0],
+            srs=srs,
+            geom_type=geomType
+        )
+        for f in fieldDefns:
+            l.CreateField(f)
+
+        for i, record in df.iterrows():
+            feature = ogr.Feature(l.GetLayerDefn())
+
+            for field, value in ((k, v) for k, v in record.to_dict().items() if k != 'geometry'):
+                feature.SetField(field, value)
+            feature.SetGeometry(ogr.CreateGeometryFromWkb(record['geometry'].wkb))
+            l.CreateFeature(feature)
+
+        ds.SyncToDisk()
+        del ds
 
 driver = ShapefileDriver

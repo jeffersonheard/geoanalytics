@@ -1,6 +1,7 @@
 import threading
 threading._DummyThread._Thread__stop = lambda x: 42
 
+
 ######################
 # MEZZANINE SETTINGS #
 ######################
@@ -357,6 +358,7 @@ try:
     INSTALLED_APPS += SITE_APPS
 except NameError:
     pass
+
 
 ####################
 # DYNAMIC SETTINGS #

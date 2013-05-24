@@ -1,8 +1,13 @@
 from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
 from django.contrib.gis.db import models
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_delete
+from django.conf import settings as s
 import importlib
+import sh
+import os
+from osgeo import osr
+
 
 class SpatialMetadata(models.Model):
     native_bounding_box = models.PolygonField(null=True)
@@ -29,15 +34,47 @@ class DataResource(Page, RichText):
     spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
 
     @property
+    def srs(self):
+        srs = osr.SpatialReference()
+        srs.ImportFromProj4(self.spatial_metadata.native_srs.encode('ascii'))
+        return srs
+
+    @property
+    def dataframe(self):
+        return self.driver_instance.as_dataframe()
+
+    @property
     def driver_instance(self):
-        return importlib.import_module(self.driver).driver(self)
+        if not hasattr(self, '_driver_instance'):
+            self._driver_instance = importlib.import_module(self.driver).driver(self)
+        return self._driver_instance
+
+    def modified(self):
+        print "purging cache for {slug}".format(slug=self.slug)
+
+        if s.WMS_CACHE_DB.exists(self.slug):
+            cached_filenames = s.WMS_CACHE_DB.smembers(self.slug)
+            for filename in cached_filenames:
+                sh.rm('-rf', sh.glob(filename + "*"))
+
+            sh.rm('-rf', self.cache_path)
+
+            s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
+
+    @property
+    def cache_path(self):
+        p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
+        if not os.path.exists(p):
+            os.makedirs(p)  # just in case it's not there yet.
+        return p
+
 
 def dataresource_post_save(sender, instance, *args, **kwargs):
     if 'created' in kwargs and kwargs['created']:
         instance.spatial_metadata = SpatialMetadata.objects.create()
         instance.driver_instance.compute_fields()
 
-post_save.connect(dataresource_post_save, sender=DataResource)
+post_save.connect(dataresource_post_save, sender=DataResource, weak=False)
 
 
 class OrderedResource(models.Model):
@@ -104,6 +141,14 @@ class Style(Page):
     legend_height = models.IntegerField(null=True, blank=True)
     stylesheet = models.TextField()
 
+    def modified(self):
+        print "purging cache for {slug}".format(slug=self.slug)
+
+        if s.WMS_CACHE_DB.exists(self.slug):
+            cached_filenames = s.WMS_CACHE_DB.smembers(self.slug)
+            for filename in cached_filenames:
+                sh.rm('-rf', sh.glob(filename+"*"))
+            s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
 
 class StyleTemplate(Page):
     """A template stylesheet in Python Template format for quickly creating styles from well-known styles. """
@@ -135,3 +180,19 @@ class AnimatedResourceLayer(Page, RichText):
     default_style = models.ForeignKey(Style, related_name='default_for_animation')
     styles = models.ManyToManyField(Style)
     cache_seconds = models.PositiveIntegerField(default=60)
+
+
+def purge_cache_on_save(sender, instance, created, *args, **kwargs):
+    """Signal handler for styles and data resources that purges the cache using a redis set of files associated with the thing"""
+    if not created:
+        instance.modified()
+
+def purge_cache_on_delete(sender, instance, created, *args, **kwargs):
+    purge_cache_on_save(sender, instance, created, *args, **kwargs)
+    s.WMS_CACHE_DB.delete(sender.slug)
+
+
+post_save.connect(purge_cache_on_save, sender=Style, weak=False)
+post_save.connect(purge_cache_on_save, sender=DataResource, weak=False)
+pre_delete.connect(purge_cache_on_delete, sender=Style, weak=False)
+pre_delete.connect(purge_cache_on_delete, sender=DataResource, weak=False)

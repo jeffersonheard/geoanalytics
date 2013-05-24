@@ -6,4 +6,6 @@ urlpatterns = patterns('',
     url(r'^styles/', include(api.styles.urls)),
     url(r'^layers/', include(api.layers.urls)),
     url(r'^wms/', views.WMS.as_view()),
+    url(r'^styler/', views.StylerView.as_view()),
+    url(r'^save_style/', views.SaveStyleView.as_view())
 )
