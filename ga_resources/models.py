@@ -187,9 +187,9 @@ def purge_cache_on_save(sender, instance, created, *args, **kwargs):
     if not created:
         instance.modified()
 
-def purge_cache_on_delete(sender, instance, created, *args, **kwargs):
-    purge_cache_on_save(sender, instance, created, *args, **kwargs)
-    s.WMS_CACHE_DB.delete(sender.slug)
+def purge_cache_on_delete(sender, instance, *args, **kwargs):
+    purge_cache_on_save(sender, instance, False, *args, **kwargs)
+    s.WMS_CACHE_DB.delete(instance.slug)
 
 
 post_save.connect(purge_cache_on_save, sender=Style, weak=False)
