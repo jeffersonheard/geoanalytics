@@ -10,11 +10,18 @@ import time
 from pandas import DataFrame
 from shapely import geometry, wkb
 from urllib2 import urlopen
+import shutil
+from django.template.defaultfilters import slugify
+import re
+from datetime import datetime
 
 VECTOR = False
 RASTER = True
 
 DATA_TYPE = VECTOR
+
+def ogrfield(elt):
+    return re.sub('-', '_', slugify(elt).encode('ascii'))[0:10]
 
 class ShapefileDriver(Driver):
     DATA_TYPE = VECTOR
@@ -47,7 +54,7 @@ class ShapefileDriver(Driver):
                 os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
             elif self.resource.resource_url:
                 if self.resource.resource_url.startswith('ftp'):
-                    result = urlopen(self.resource.url).read()
+                    result = urlopen(self.resource.resource_url).read()
                     if result:
                         with open(cached_filename, 'wb') as resource_file:
                             resource_file.write(result)
@@ -116,7 +123,7 @@ class ShapefileDriver(Driver):
             os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
         elif self.resource.resource_url:
             if self.resource.resource_url.startswith('ftp'):
-                result = urlopen(self.resource.url).read()
+                result = urlopen(self.resource.resource_url).read()
                 if result:
                     with open(cached_filename, 'wb') as resource_file:
                         resource_file.write(result)
@@ -218,7 +225,7 @@ class ShapefileDriver(Driver):
             ds = ogr.Open(shp_path)
             lyr = ds.GetLayerByIndex(0)
             df= DataFrame.from_records(
-                data=[dict(fid=f.GetFID(), geometry=wkb.loads(f.geometry().ExportToWkb()), **f.items()) for f in lyr],
+                data=[dict(fid=f.GetFID(), geometry=wkb.loads(f.geometry().ExportToWkb()), **f.items()) for f in lyr if f.geometry()],
                 index='fid'
             )
             df.save(dfx_path)
@@ -226,13 +233,14 @@ class ShapefileDriver(Driver):
             return self._df
 
     @classmethod
-    def from_dataframe(self, df, shp, srs):
+    def from_dataframe(cls, df, shp, srs):
         """Write an dataframe object out as a shapefile"""
 
         dtypes = {
             'int64' : ogr.OFTInteger,
             'float64' : ogr.OFTReal,
-            'object' : ogr.OFTString
+            'object' : ogr.OFTString,
+            'datetime64[ns]' : ogr.OFTDateTime
         }
         geomTypes = {
             'GeometryCollection' : ogr.wkbGeometryCollection,
@@ -248,16 +256,16 @@ class ShapefileDriver(Driver):
         drv = ogr.GetDriverByName('ESRI Shapefile')
 
         if os.path.exists(shp):
-            sh.rm('-rf', shp)
+            shutil.rmtree(shp)
 
         os.mkdir(shp)
 
         ds = drv.CreateDataSource(shp)
         keys = df.keys()
-        fieldDefns = [ogr.FieldDefn(name, dtypes[df[name].dtype.name]) for name in keys if name != 'geometry']
+        fieldDefns = [ogr.FieldDefn(ogrfield(name), dtypes[df[name].dtype.name]) for name in keys if name != 'geometry']
         geomType = geomTypes[df['geometry'][0].type]
         l = ds.CreateLayer(
-            name=os.path.splitext(os.path.split(shp)[-1])[0],
+            name=os.path.split(shp)[-1],
             srs=srs,
             geom_type=geomType
         )
@@ -268,7 +276,9 @@ class ShapefileDriver(Driver):
             feature = ogr.Feature(l.GetLayerDefn())
 
             for field, value in ((k, v) for k, v in record.to_dict().items() if k != 'geometry'):
-                feature.SetField(field, value)
+                if isinstance(value, basestring):
+                    value=value.encode('ascii')
+                feature.SetField(ogrfield(field), value)
             feature.SetGeometry(ogr.CreateGeometryFromWkb(record['geometry'].wkb))
             l.CreateFeature(feature)
 

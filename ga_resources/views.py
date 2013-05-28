@@ -14,13 +14,7 @@ class StylerView(TemplateView):
 
         resource_slug = self.request.GET['resource']
         resource = models.DataResource.objects.get(slug=resource_slug)
-        # the styler expects a summary like this:
-        #[
-        #    { name: "NAME", kind: "text", tags: ['unique'] }
-        #    { name: "ROAD_CLASS", kind: "number", tags : ['categorical', 'not null'], uniques : [0, 1, 2, 3, 4, 5, 6], min: 0, max: 6 }
-        #    { name: "LANES", kind: "number", tags : ['categorical', 'null', 'mostly null'], uniques : [null, 2, 3, 4, 6, 8], min: 2, max: 8 }
-        #    { name: "CAPACITY", kind: "number", tags : ['continuous', 'null', 'mostly null'], min: 12400, max: 1000000 }
-        #]
+
         drv = resource.driver_instance
         df = drv.as_dataframe()
         keys = [k for k in df.keys() if k != 'geometry']
@@ -30,7 +24,7 @@ class StylerView(TemplateView):
             'object' : 'text'
         }
         ctx['resource'] = resource
-        ctx['new_service'] = self.request.GET and self.request.GET['new']
+        ctx['new_service'] = 'new' in self.request.GET and self.request.GET['new']
 
         ctx['attrs'] = [{ 'name' : k } for k in keys]
         for i, k in enumerate(keys):

@@ -7,7 +7,11 @@ import time
 
 def run_notebook(ipython_arguments):
     ipython_arguments.extend(['--ext', 'django_extensions.management.notebook_extension'])
-    sh.ipython('notebook', *ipython_arguments, _bg=True, _env={ 'PYTHONPATH' : "/home/th/th_cms/th_cms" })
+    sh.ipython('notebook', *ipython_arguments, _bg=True, _env={
+        'PYTHONPATH' : settings.PROJECT_ROOT,
+        'DJANGO_SETTINGS_MODULE' : 'settings',
+        'LD_LIBRARY_PATH' : os.path.join(os.environ['VIRTUAL_ENV'], 'lib')
+    })
 
 def shared_notebook(request, *args, **kwargs):
     notebook_settings = list(settings.IPYTHON_SETTINGS)
