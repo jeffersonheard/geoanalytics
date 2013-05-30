@@ -5,7 +5,7 @@ import os
 import sh
 import requests
 from osgeo import osr, ogr
-from . import Driver
+from . import Driver, VECTOR
 import time
 from pandas import DataFrame
 from shapely import geometry, wkb
@@ -14,9 +14,6 @@ import shutil
 from django.template.defaultfilters import slugify
 import re
 from datetime import datetime
-
-VECTOR = False
-RASTER = True
 
 DATA_TYPE = VECTOR
 
@@ -30,58 +27,27 @@ class ShapefileDriver(Driver):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        cache_path = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.resource.slug))
+        changed = self.ensure_local_file(freshen='fresh' in kwargs and kwargs['fresh'])
 
-        if not os.path.exists(cache_path):
-            os.makedirs(cache_path)
-
-        if self.resource.resource_file:
-            _, ext = os.path.splitext(self.resource.resource_file.name)
-        elif self.resource.resource_url:
-            _, ext = os.path.splitext(self.resource.resource_url)
-        else:
-            _, ext = os.path.splitext(self.resource.resource_irods_file)
-
-        cached_basename = os.path.join(cache_path, os.path.split(self.resource.slug)[-1])
-        cached_filename = cached_basename + ext
-
-        ready = self.resource.perform_caching and os.path.exists(cached_filename) and ('fresh' not in kwargs or kwargs['fresh'] is False)
-
-        if not ready:
-            if self.resource.resource_file:
-                if os.path.exists(cached_filename):
-                    os.unlink(cached_filename)
-                os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
-            elif self.resource.resource_url:
-                if self.resource.resource_url.startswith('ftp'):
-                    result = urlopen(self.resource.resource_url).read()
-                    if result:
-                        with open(cached_filename, 'wb') as resource_file:
-                            resource_file.write(result)
-                else:
-                    result = requests.get(self.resource.resource_url)
-                    if result.ok:
-                        with open(cached_filename, 'wb') as resource_file:
-                            resource_file.write(result.content)
-
-            sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shp')))
-            sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shx')))
-            sh.rm('-f', sh.glob(os.path.join(cache_path, '*.dbf')))
-            sh.rm('-f', sh.glob(os.path.join(cache_path, '*.prj')))
-            sh.unzip("-o", cached_filename, '-d', cache_path)
-            sh.mv(sh.glob(os.path.join(cache_path, '*.shp')), cached_basename + '.shp')
-            sh.mv(sh.glob(os.path.join(cache_path, '*.shx')), cached_basename + '.shx')
-            sh.mv(sh.glob(os.path.join(cache_path, '*.dbf')), cached_basename + '.dbf')
-
+        if changed:
+            sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shp')))
+            sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shx')))
+            sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.dbf')))
+            sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.prj')))
+            sh.unzip("-o", self.cached_basename+self.src_ext, '-d', self.cache_path)
+            sh.mv(sh.glob(os.path.join(self.cache_path, '*.shp')), self.cached_basename + '.shp')
+            sh.mv(sh.glob(os.path.join(self.cache_path, '*.shx')), self.cached_basename + '.shx')
+            sh.mv(sh.glob(os.path.join(self.cache_path, '*.dbf')), self.cached_basename + '.dbf')
+    
             try:
-                sh.mv(sh.glob(os.path.join(cache_path, '*.prj')), cached_basename + '.prj')
+                sh.mv(sh.glob(os.path.join(self.cache_path, '*.prj')), self.cached_basename + '.prj')
             except:
-                with open(cached_basename + '.prj', 'w') as f:
+                with open(self.cached_basename + '.prj', 'w') as f:
                     srs = osr.SpatialReference()
                     srs.ImportFromEPSG(4326)
                     f.write(srs.ExportToWkt())
-
-            ds = ogr.Open(cached_basename + '.shp')
+    
+            ds = ogr.Open(self.cached_basename + '.shp')
             lyr = ds.GetLayerByIndex(0)
             xmin, xmax, ymin, ymax = lyr.GetExtent()
             crs = lyr.GetSpatialRef()
@@ -96,64 +62,32 @@ class ShapefileDriver(Driver):
             self.resource.spatial_metadata.save()
             self.resource.save()
 
-        return cache_path, (self.resource.slug, self.resource.spatial_metadata.native_srs, {'type': 'shape', "file": cached_basename + '.shp'})
+        return self.cache_path, (self.resource.slug, self.resource.spatial_metadata.native_srs, {'type': 'shape', "file": self.cached_basename + '.shp'})
 
     def compute_fields(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        cache_path = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.resource.slug))
+        self.ensure_local_file(True)
 
-        if not os.path.exists(cache_path):
-            os.makedirs(cache_path)
-
-        if self.resource.resource_file:
-            _, ext = os.path.splitext(self.resource.resource_file.name)
-        elif self.resource.resource_url:
-            _, ext = os.path.splitext(self.resource.resource_url)
-        else:
-            _, ext = os.path.splitext(self.resource.resource_irods_file)
-
-        cached_basename = os.path.join(cache_path, os.path.split(self.resource.slug)[-1])
-        cached_filename = cached_basename + ext
-
-        if self.resource.resource_file:
-            if os.path.exists(cached_filename):
-                os.unlink(cached_filename)
-            os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
-        elif self.resource.resource_url:
-            if self.resource.resource_url.startswith('ftp'):
-                result = urlopen(self.resource.resource_url).read()
-                if result:
-                    with open(cached_filename, 'wb') as resource_file:
-                        resource_file.write(result)
-            else:
-                result = requests.get(self.resource.resource_url)
-                if result.ok:
-                    with open(cached_filename, 'wb') as resource_file:
-                        resource_file.write(result.content)
-                else:
-                    result.raise_for_status()
-
-
-        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shp')))
-        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.shx')))
-        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.dbf')))
-        sh.rm('-f', sh.glob(os.path.join(cache_path, '*.prj')))
-        sh.unzip("-o", cached_filename, '-d', cache_path)
-        sh.mv(sh.glob(os.path.join(cache_path, '*.shp')), cached_basename + '.shp')
-        sh.mv(sh.glob(os.path.join(cache_path, '*.shx')), cached_basename + '.shx')
-        sh.mv(sh.glob(os.path.join(cache_path, '*.dbf')), cached_basename + '.dbf')
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shp')))
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shx')))
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.dbf')))
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.prj')))
+        sh.unzip("-o", self.self.cached_basename + self.src_ext, '-d', self.cache_path)
+        sh.mv(sh.glob(os.path.join(self.cache_path, '*.shp')), self.cached_basename + '.shp')
+        sh.mv(sh.glob(os.path.join(self.cache_path, '*.shx')), self.cached_basename + '.shx')
+        sh.mv(sh.glob(os.path.join(self.cache_path, '*.dbf')), self.cached_basename + '.dbf')
 
         try:
-            sh.mv(sh.glob(os.path.join(cache_path, '*.prj')), cached_basename + '.prj')
+            sh.mv(sh.glob(os.path.join(self.cache_path, '*.prj')), self.cached_basename + '.prj')
         except:
-            with open(cached_basename + '.prj', 'w') as f:
+            with open(self.cached_basename + '.prj', 'w') as f:
                 srs = osr.SpatialReference()
                 srs.ImportFromEPSG(4326)
                 f.write(srs.ExportToWkt())
 
-        ds = ogr.Open(cached_basename + '.shp')
+        ds = ogr.Open(self.cached_basename + '.shp')
         lyr = ds.GetLayerByIndex(0)
         xmin, xmax, ymin, ymax = lyr.GetExtent()
         crs = lyr.GetSpatialRef()
@@ -168,10 +102,6 @@ class ShapefileDriver(Driver):
         self.resource.spatial_metadata.three_d = False
         self.resource.spatial_metadata.save()
         self.resource.save()
-
-    def get_filename(self, xtn):
-        filename = os.path.split(self.resource.slug)[-1]
-        return os.path.join(self.cache_path, filename + '.' + xtn)
 
     def get_data_fields(self, **kwargs):
         _, (_, _, result) = self.ready_data_resource(**kwargs)
@@ -215,8 +145,8 @@ class ShapefileDriver(Driver):
 
         dfx_path = self.get_filename('dfx')
         shp_path = self.get_filename('shp')
-        if hasattr(self, '_dataframe'):
-            return self._dataframe
+        if hasattr(self, '_df'):
+            return self._df
 
         elif os.path.exists(dfx_path) and os.stat(dfx_path).st_mtime >= os.stat(shp_path).st_mtime:
             self._df = DataFrame.load(dfx_path)

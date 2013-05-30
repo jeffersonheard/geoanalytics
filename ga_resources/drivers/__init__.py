@@ -7,9 +7,11 @@ import os
 from django.conf import settings as s
 import sh
 from datetime import datetime
-from django.utils.timezone import utc
-import json
-import redis
+from urllib2 import urlopen
+import requests
+
+VECTOR = False
+RASTER = True
 
 
 class Driver(object):
@@ -17,6 +19,40 @@ class Driver(object):
     def __init__(self, data_resource):
         self.resource = data_resource
         self.cache_path = self.resource.cache_path
+        self.cached_basename = os.path.join(self.cache_path, os.path.split(self.resource.slug)[-1])
+
+    def ensure_local_file(self, freshen=False):
+        if self.resource.resource_file:
+            _, ext = os.path.splitext(self.resource.resource_file.name)
+        elif self.resource.resource_url:
+            _, ext = os.path.splitext(self.resource.resource_url)
+        else:
+            _, ext = os.path.splitext(self.resource.resource_irods_file)
+
+        cached_filename = self.cached_basename + ext
+        self.src_ext = ext
+
+        ready = self.resource.perform_caching and os.path.exists(cached_filename) or not freshen
+
+        if not ready:
+            if self.resource.resource_file:
+                if os.path.exists(cached_filename):
+                    os.unlink(cached_filename)
+                os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
+            elif self.resource.resource_url:
+                if self.resource.resource_url.startswith('ftp'):
+                    result = urlopen(self.resource.resource_url).read()
+                    if result:
+                        with open(cached_filename, 'wb') as resource_file:
+                            resource_file.write(result)
+                else:
+                    result = requests.get(self.resource.resource_url)
+                    if result.ok:
+                        with open(cached_filename, 'wb') as resource_file:
+                            resource_file.write(result.content)
+            return True
+        else:
+            return False
 
     def ready_data_resource(self, **kwargs):
         """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
@@ -34,6 +70,11 @@ class Driver(object):
         raster (as opposed to an RGB or grayscale raster, return the names of the bands or subdatasets and their
         datatypes."""
         return []
+
+    def get_filename(self, xtn):
+        filename = os.path.split(self.resource.slug)[-1]
+        return os.path.join(self.cache_path, filename + '.' + xtn)
+
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
         raise NotImplementedError("Method get_data_for_point is not implemented in abstract class")
