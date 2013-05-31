@@ -58,7 +58,10 @@ class GeotiffDriver(Driver):
             self.resource.spatial_metadata.save()
             self.resource.save()
 
-        return self.cache_path, (self.resource.slug, self.resource.spatial_metadata.native_srs, {'type': 'geotiff', "file": self.cached_basename + '.tif'})
+        return self.cache_path, (self.resource.slug, self.resource.spatial_metadata.native_srs, {
+            'type': 'gdal',
+            "file": self.cached_basename + '.tif'
+        })
 
     def compute_fields(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
