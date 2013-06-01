@@ -48,7 +48,7 @@ class ShapefileDriver(Driver):
                     f.write(srs.ExportToWkt())
     
             ds = ogr.Open(self.cached_basename + '.shp')
-            lyr = ds.GetLayerByIndex(0)
+            lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else kwargs['sublayer']
             xmin, xmax, ymin, ymax = lyr.GetExtent()
             crs = lyr.GetSpatialRef()
             self.resource.spatial_metadata.native_srs = crs.ExportToProj4()
@@ -88,7 +88,7 @@ class ShapefileDriver(Driver):
                 f.write(srs.ExportToWkt())
 
         ds = ogr.Open(self.cached_basename + '.shp')
-        lyr = ds.GetLayerByIndex(0)
+        lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
         xmin, xmax, ymin, ymax = lyr.GetExtent()
         crs = lyr.GetSpatialRef()
         self.resource.spatial_metadata.native_srs = crs.ExportToProj4()
@@ -106,13 +106,13 @@ class ShapefileDriver(Driver):
     def get_data_fields(self, **kwargs):
         _, (_, _, result) = self.ready_data_resource(**kwargs)
         ds = ogr.Open(result['file'])
-        lyr = ds.GetLayerByIndex(0)
+        lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
         return [(field.name, field.GetTypeName(), field.width) for field in lyr.schema]
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
         _, (_, nativesrs, result) = self.ready_data_resource(**kwargs)
         ds = ogr.Open(result['file'])
-        lyr = ds.GetLayerByIndex(0)
+        lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
 
         s_srs = osr.SpatialReference()
         t_srs = osr.SpatialReference()

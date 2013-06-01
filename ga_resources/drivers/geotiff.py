@@ -1,25 +1,11 @@
-# from ga_ows.views import wms, wfs
-from django.conf import settings as s
 from django.contrib.gis.geos import Polygon
 import os
-import sh
-import requests
 from osgeo import osr, gdal
 from . import Driver, VECTOR
 import time
 from pandas import DataFrame, Panel
-from shapely import geometry, wkb
-from urllib2 import urlopen
-import shutil
 from django.template.defaultfilters import slugify
 import re
-from datetime import datetime
-from django.http import Http404
-
-DATA_TYPE = VECTOR
-
-def ogrfield(elt):
-    return re.sub('-', '_', slugify(elt).encode('ascii'))[0:10]
 
 class GeotiffDriver(Driver):
     DATA_TYPE = VECTOR
@@ -31,8 +17,6 @@ class GeotiffDriver(Driver):
         changed = self.ensure_local_file(freshen='fresh' in kwargs and kwargs['fresh'])
     
         if changed:
-
-
             ds = gdal.Open(self.cached_basename + '.tif')
             nx = ds.RasterXSize
             ny = ds.RasterYSize
@@ -95,6 +79,15 @@ class GeotiffDriver(Driver):
         self.resource.save()
 
     def get_data_fields(self, **kwargs):
+        dtypes = {
+            gdal.GDT_Byte : 'unsigned 8-bit integer',
+            gdal.GDT_Int16 : '16-bit integer',
+            gdal.GDT_Int32 : '32-bit integer',
+            gdal.GDT_Float64 : 'long double-precision float',
+            gdal.GDT_Unknown : 'string or other',
+            gdal.GDT_UInt32 : 'unsigned 32-bit integer (sometimes used for RGB in broken files)'
+        }
+
         _, (_, _, result) = self.ready_data_resource(**kwargs)
         ds = gdal.Open(result['file'])
         n = ds.RasterCount
@@ -103,13 +96,23 @@ class GeotiffDriver(Driver):
             band = ds.GetRasterBand(i)
             ret.append((
                 str(i),
-                band.DataType,
+                dtypes[band.DataType],
                 1
             ))
 
         return ret
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
+        """
+        This can be used to implement GetFeatureInfo in WMS.  It gets a value for a single point
+
+        :param wherex: The point in the destination coordinate system
+        :param wherey: The point in the destination coordinate system
+        :param srs: The destination coordinate system
+        :param fuzziness: UNUSED
+        :param kwargs: "band : int" refers to the band index, if present
+        :return: A tuple containing the values for the point
+        """
         _, (_, nativesrs, result) = self.ready_data_resource(**kwargs)
         ds = gdal.Open(result['file'])
         n = ds.RasterCount
@@ -143,16 +146,14 @@ class GeotiffDriver(Driver):
             xoff = int((x1-xmin) / (xmax-xmin) * nx)
             yoff = int((y1-ymin) / (ymax-ymin) * ny)
 
-            return tuple(ds.ReadAsArray(xoff,yoff,1,1).reshape(ds.RasterCount))
-
+            return dict(zip(range(ds.RasterCount), ds.ReadAsArray(xoff,yoff,1,1).reshape(ds.RasterCount)))
 
     def as_dataframe(self):
         """
         Creates a dataframe object for a shapefile's main layer using layer_as_dataframe. This object is cached on disk for
         layer use, but the cached copy will only be picked up if the shapefile's mtime is older than the dataframe's mtime.
 
-        :param shp: The shapefile
-        :return:
+        :return: either a pandas DataFrame object if there is but one raster band or a Panel if there are N.
         """
 
         dfx_path = self.get_filename('dfx')
@@ -178,12 +179,22 @@ class GeotiffDriver(Driver):
 
     @classmethod
     def from_dataframe(cls, df, filename, srs, x0, dx, y0, dy, xt=0, yt=0, **metadata):
-        """Write an dataframe object out as a geotiff. Note that no interpolation will be done.  Everything must be
+        """
+        Write an dataframe object out as a geotiff. Note that no interpolation will be done.  Everything must be
         ready as is to be made into an image, including rows, columns, and the final data type.
 
-
+        :param df: Either a DataFrame or Panel object from pandas
+        :param filename: The file to write a GeoTiff to
+        :param srs: The spatial reference system (an ogr.SpatialReference object)
+        :param x0: The left boundary of the object - part of the GeoTransform
+        :param dx: The increment in x for a single column (pixel)
+        :param y0: The north (or in unusual cases, south) boundary of the object
+        :param dy: The increment in y for a single row (pixel)
+        :param xt: The "skew" x-wise (part of the GDAL geotransform)
+        :param yt: THe "skew" y-wise (part of the GDAL geotransform)
+        :param metadata: Any key-value pairs you wish to set as metadata for the object
+        :return: None
         """
-
         dtypes = {
             'uint8' : gdal.GDT_Byte,
             'int64' : gdal.GDT_Int16,
