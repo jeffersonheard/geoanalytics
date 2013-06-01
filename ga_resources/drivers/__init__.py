@@ -32,7 +32,7 @@ class Driver(object):
         cached_filename = self.cached_basename + ext
         self.src_ext = ext
 
-        ready = self.resource.perform_caching and os.path.exists(cached_filename) or not freshen
+        ready = self.resource.perform_caching and os.path.exists(cached_filename) and not freshen
 
         if not ready:
             if self.resource.resource_file:

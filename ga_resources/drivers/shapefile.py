@@ -120,9 +120,9 @@ class ShapefileDriver(Driver):
         if srs.lower().startswith('epsg'):
             s_srs.ImportFromEPSG(int(srs.split(':')[-1]))
         else:
-            s_srs.ImportFromProj4(srs)
+            s_srs.ImportFromProj4(srs.encode('ascii'))
 
-        t_srs.ImportFromProj4(nativesrs)
+        t_srs.ImportFromProj4(nativesrs.encode('ascii'))
         crx = osr.CoordinateTransformation(s_srs, t_srs)
         x1, y1, _ = crx.TransformPoint(wherex, wherey)
 

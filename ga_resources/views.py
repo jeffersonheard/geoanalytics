@@ -4,6 +4,7 @@ from django.views.generic import TemplateView, View
 import json
 from django.http import HttpResponse, HttpResponseRedirect
 import numpy as np
+from osgeo import osr
 
 class StylerView(TemplateView):
     template_name = 'ga_resources/styler.html'
@@ -86,7 +87,7 @@ class SaveStyleView(View):
             min_o = summary['min']
             max_o = summary['max']
             attribute = summary['attribute']
-            opacity = np.arange(start=min_o, stop=max_o, step=(max_o-min_o)/(len(segments)-1))
+            opacity = np.linspace(min_o, max_o, len(segments))
             return None, ["Layer [{attr} {op} {value}] {{ {key}: {j}; }}".format(
                     attr=attribute,
                     value=self.maybe_string(v),
@@ -198,6 +199,11 @@ class WMSAdapter(wms.WMSAdapterBase):
 
     def get_feature_info(self, wherex, wherey, layers, callback, format, feature_count, srs, filter, fuzziness=0, **kwargs):
         """use the driver to get feature info"""
+
+        if srs.lower().startswith('epsg'):
+           s = osr.SpatialReference()
+           s.ImportFromEPSG(int(srs[5:]))
+           srs = s.ExportToProj4()
 
         feature_info = {
             layer : models.RenderedLayer.objects.get(slug=layer).data_resource.driver_instance.get_data_for_point(

@@ -2,6 +2,7 @@ from bson import Binary
 from django.http import HttpResponse
 from django.shortcuts import render_to_response
 import json
+from lxml import etree
 
 try:
     import scipy.misc
@@ -531,7 +532,14 @@ class GetFeatureInfoMixin(common.OWSMixinBase):
         elif parms['format'] == 'application/json':
             return HttpResponse(json.dumps(info), mimetype='application/json')
         else:
-            return HttpResponse(json.dumps(info), mimetype='application/json')
+            elt = etree.Element('FeatureInfoResponse')
+            for i, layer in enumerate(info.keys()):
+                for feature in info[layer]:
+                    fields = etree.SubElement(elt, "FIELDS")
+                    for k, v in feature.items():
+                        fields.set(k, unicode(v))
+            
+            return HttpResponse(etree.tostring(elt, xml_declaration=True), mimetype='application/vnd.ogc.wms_xml')
             #raise common.OWSException.at('GetFeatureInfo', "Feature info format not supported")
 
 class GetStylesMixin(common.OWSMixinBase):
