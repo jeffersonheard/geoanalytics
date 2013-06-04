@@ -72,6 +72,7 @@ python-dateutil==2.1
 python-debian==0.1.21-nmu2ubuntu1
 pytz==2012j
 pyxdg==0.25
+redis==2.7.5
 reportlab==2.6
 requests==1.1.0
 rhythmbox-ubuntuone==4.2.0
