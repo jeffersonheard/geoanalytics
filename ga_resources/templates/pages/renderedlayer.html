@@ -4,7 +4,7 @@
 
 {% block main %}{{ block.super }}
     <h4>Preview</h4>
-    <div id="map" style='width: 600px;'></div>
+    <div class='simple-map' id="map" style='width: 600px;'></div>
 
     <h4>Description</h4>
     {% editable page.renderedlayer.content %}
@@ -20,7 +20,7 @@
     <ul>
 
         {% for style in page.renderedlayer.styles.all %}
-            <li><a href="{{ style.get_relative_url }}">{{ style.title }}</a></li>
+            <li><a href="{{ style.get_absolute_url }}">{{ style.title }}</a></li>
         {% endfor %}
 
     </ul>
@@ -42,7 +42,12 @@
             var bounds = feature.geometry.getBounds();
 
             var wms = new OpenLayers.Layer.WMS('{{ page.renderedlayer.title }}', "/ga_resources/wms/", {
+
+                {% if not request.GET.style %}
                 styles: "{{ page.renderedlayer.default_style.slug }}",
+                {% else %}
+                styles: "{{ request.GET.style }}",
+                {% endif %}
                 layers: "{{ page.renderedlayer.slug }}",
                 transparent: true
             });
@@ -50,16 +55,6 @@
 
             var map = new OpenLayers.Map({ div:'map', projection: "EPSG:900913", layers: [
                   new OpenLayers.Layer.OSM("OpenStreetMap")
-//                new OpenLayers.Layer.XYZ(
-//                        "OpenStreetMap",
-//                        [
-//                            "http://otile1.mqcdn.com/tiles/1.0.0/map/${z}/${x}/${y}.png",
-//                            "http://otile2.mqcdn.com/tiles/1.0.0/map/${z}/${x}/${y}.png",
-//                            "http://otile3.mqcdn.com/tiles/1.0.0/map/${z}/${x}/${y}.png",
-//                            "http://otile4.mqcdn.com/tiles/1.0.0/map/${z}/${x}/${y}.png"
-//                        ]
-//                )
-
             ]});
 
             map.addLayers([wms]);
@@ -80,11 +75,6 @@
       <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
     <link rel="stylesheet" href="{{ STATIC_URL }}bootstrap/css/font-awesome.css">
-    <style type="text/css">
-        #map { width: 100%; height:300px; }
-        .olMap img { max-width: none; box-shadow: none; }
-        .olControlAttribution { position: relative; top: 10px; text-shadow: 1px 1px 2px white, 0 0 1em white, 0 0 0.2em white; }
-        .olControlMousePosition { font-weight: bold; text-shadow: 1px 1px 2px white, 0 0 1em white, 0 0 0.2em white;}
-    </style>
+    <link rel="stylesheet" href="{{ STATIC_URL }}css/ga_resources.css"/>
 
 {% endblock %}

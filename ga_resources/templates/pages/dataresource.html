@@ -10,8 +10,7 @@
     <hr>
 
     <h3>Layer boundaries</h3>
-    <div id="map" style='width: 600px;'></div>
-
+    <div class='simple-map' id="map" style='width: 600px;'></div>
 
     <h3>Data Fields</h3>
     <dl>
@@ -29,7 +28,6 @@
         <h5><a href="{{ page.dataresource.resource_url }}">Download the original resource file.</a></h5>
     {% endif %}
 
-
     {% if page.dataresource.renderedlayer_set.exists %}
         <dl>
             <dt>WMS</dt>
@@ -40,29 +38,11 @@
                     {% endfor %}
                 </ul>
             </dd>
-            {% comment %}<dt>WMTS {% if page.dataresource.perform_caching %}(cached){% endif %}</dt>
-            <dd>
-                <ul>
-                    {% for service in page.dataresource.renderedlayer_set.all %}
-                        <li><a href="{{ service.get_absolute_url }}">{{ service.title }}</a></li>
-                    {% endfor %}
-                </ul>
-            </dd>{% endcomment %}
-        </dl>
-    {% elif page.dataresource.animatedlayer_set.exists %}
-        <dl>
-            <dt>WMVS</dt>
-            <dd>
-                <ul>
-                    {% for service in page.dataresource.animatedresourcelayer_set.all %}
-                        <li><a href="{{ service.get_absolute_url }}">{{ service.title }}</a></li>
-                    {% endfor %}
-                </ul>
-            </dd>
         </dl>
     {% else %}
-        <i>No layers associated with this resource</i>
+        <i>No services associated with this resource</i>
     {% endif %}
+    <a class="btn btn-primary" href="/ga_resources/styler/?resource={{ page.slug }}"><i class="icon-plus"></i> Create layer</a>
 
 {% endblock %}
 
@@ -111,11 +91,6 @@
       <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
     <link rel="stylesheet" href="{{ STATIC_URL }}bootstrap/css/font-awesome.css">
-    <style type="text/css">
-        #map { width: 100%; height:300px; }
-        .olMap img { max-width: none; box-shadow: none; }
-        .olControlAttribution { position: relative; top: 10px; text-shadow: 1px 1px 2px white, 0 0 1em white, 0 0 0.2em white; }
-        .olControlMousePosition { font-weight: bold; text-shadow: 1px 1px 2px white, 0 0 1em white, 0 0 0.2em white;}
-    </style>
+    <link rel="stylesheet" href="{{ STATIC_URL }}css/ga_resources.css"/>
 
 {% endblock %}
