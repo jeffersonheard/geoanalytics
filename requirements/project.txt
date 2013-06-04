@@ -1,6 +1,6 @@
 Django==1.5.1
-GDAL==1.8.1
-GnuPGInterface==0.3.2
+GDAL
+GnuPGInterface
 Mako==0.7.3
 MarkupSafe==0.15
 Mezzanine==1.4.3
@@ -16,9 +16,10 @@ adium-theme-ubuntu==0.3.3
 apt-xapian-index==0.45
 argparse==1.2.1
 bleach==1.2.1
-bzr==2.6.0dev3
-bzr-dbus==0.1-
-bzr-gtk==0.104.0
+cython
+bzr
+bzr-dbus
+bzr-gtk
 cascadenik==2.6.5
 chardet==2.0.1
 configglue==1.0
