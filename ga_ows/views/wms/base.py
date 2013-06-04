@@ -498,14 +498,16 @@ class GetFeatureInfoMixin(common.OWSMixinBase):
             request['i'] = int( request.get('i', request.get('y')) )
             request['j'] = int( request.get('j', request.get('x')) )
             request['srs'] = request.get('srs', None)
-            request['format'] = request.get('format', 'application/json')
+            request['format'] = request.get('info_format', request.get('format', 'application/json'))
             request['callback'] = request.get('callback', None)
             request['filter'] = request.get('filter', None)
             if not request['callback']:
                 request['callback'] = request.get('jsonp', None)
             request['feature_count'] = request.get('feature_count', None)
 
+
     def GetFeatureInfo(self, r, kwargs):
+        print json.dumps({k : str(v) for k, v in r.META.items()}, indent=4)
         parms = GetFeatureInfoMixin.Parameters.create(kwargs).cleaned_data
 
         y = parms['i']
@@ -529,7 +531,7 @@ class GetFeatureInfoMixin(common.OWSMixinBase):
 
         if parms['callback']:
             return HttpResponse("{callback}({json})".format(callback=parms['callback'], json=json.dumps(info)))
-        elif parms['format'] == 'application/json':
+        elif parms['format'] == 'application/json' or r.META['HTTP_ACCEPT_LANGUAGE'] == 'application/json':
             return HttpResponse(json.dumps(info), mimetype='application/json')
         else:
             elt = etree.Element('FeatureInfoResponse')
