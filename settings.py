@@ -1,3 +1,12 @@
+import redis
+
+ALLOWED_HOSTS = "*"
+
+REDIS_CONNECTION = redis.Redis(db=4)
+WMS_CACHE_DB = redis.Redis(db=5)  # the redis db to connect to that will store assns between styles, layers, and filenames
+IPYTHON_SETTINGS=[]
+IPYTHON_BASE='/home/ga/geoanalytics/ga_cms/static/media/ipython-notebook'
+IPYTHON_HOST='127.0.0.1'
 
 
 ######################
@@ -157,13 +166,13 @@ STATICFILES_FINDERS = (
 DATABASES = {
     "default": {
         # Add "postgresql_psycopg2", "mysql", "sqlite3" or "oracle".
-        "ENGINE": "django.contrib.gis.db.backends.spatialite",
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
         # DB name or path to database file if using sqlite3.
-        "NAME": "/home/th/ga/ga_cms.sql3",
+        "NAME": "rhessysweb",
         # Not used with sqlite3.
-        "USER": "",
+        "USER": "geoanalytics",
         # Not used with sqlite3.
-        "PASSWORD": "",
+        "PASSWORD": "geoanalytics",
         # Set to empty string for localhost. Not used with sqlite3.
         "HOST": "",
         # Set to empty string for default. Not used with sqlite3.
@@ -256,7 +265,7 @@ INSTALLED_APPS = (
     "ga_ows",
     "ga_resources",
     "ga_irods",
-    "ga_bigboard",
+    "ga_interactive",
 )
 
 # List of processors used by RequestContext to populate the context.
