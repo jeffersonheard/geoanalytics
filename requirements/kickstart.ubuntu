@@ -1,0 +1,14 @@
+apt-get install aptitude
+aptitude install libspatialite-dev libspatialite3 spatialite-bin
+aptitude install gfortran
+aptitude install python python-pip python-virtualenv
+aptitude install postgis postgresql-9.1
+aptitude install libgeos-dev libgeos-3.3.3
+aptitude install libgdal-dev gdal-bin gdal-contrib
+aptitude install netcdf-bin libnetcdf-dev
+aptitude install python3.3 python3.3-dev
+aptitude install git
+aptitude install libmapnik2-dev libmapnik2-2.0
+aptitude install libxml2 libxml2-dev
+aptitude install libncurses5 libncurses5-dev
+aptitude install libxslt1-dev libxslt1
