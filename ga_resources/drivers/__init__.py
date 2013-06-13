@@ -27,7 +27,7 @@ class Driver(object):
         elif self.resource.resource_url:
             _, ext = os.path.splitext(self.resource.resource_url)
         else:
-            _, ext = os.path.splitext(self.resource.resource_irods_file)
+            return None
 
         cached_filename = self.cached_basename + ext
         self.src_ext = ext

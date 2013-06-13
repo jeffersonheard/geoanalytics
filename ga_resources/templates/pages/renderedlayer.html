@@ -1,6 +1,7 @@
 {% extends "pages/page.html" %}
 
-{% load mezzanine_tags %}
+{% load mezzanine_tags page_tags %}
+{% set_page_permissions %}
 
 {% block main %}{{ block.super }}
     <h4>Preview</h4>
