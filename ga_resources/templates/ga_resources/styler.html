@@ -52,90 +52,60 @@ div.tableContainer {
         </select>
     </script>
 
+    <script id="tpl-uniform-opacity" type="text/template">
+        <h3>Set <%= selector %> uniformly</h3>
+        <div class="span6"><input class="input-block-level <%= selector %>" value="1.0" type="number" name="" id=""/>
+        </div>
+    </script>
 
+    <script id="tpl-uniform-point-size" type="text/template">
+        <h3>Set <%= selector %> uniformly</h3>
+        <div class="span6"><input class="input-block-level <%= selector %>" value="1.0" type="number" name="" id=""/>
+        </div>
+    </script>
 
     <script id="tpl-standard-palette" type="text/template">
+        <h3>Set <%= attribute %> uniformly</h3>
+        <table>
             <tr>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
+                <td><button class="btn"><i class="icon-stop" data-color='#ff0000'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#00ff00'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#0000ff'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#ffff00'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#ff00ff'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#00ffff'></i></button></td>
             </tr>
             <tr>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
+                <td><button class="btn"><i class="icon-stop" data-color='#ff7777'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#77ff77'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#7777ff'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#ffff77'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#ff77ff'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#77ffff'></i></button></td>
             </tr>
             <tr>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
+                <td><button class="btn"><i class="icon-stop" data-color='#880000'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#008800'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#000088'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#888800'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#880088'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#008888'></i></button></td>
             </tr>
             <tr>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
-                </td>
-                <td>
-                    <button class="btn  btn-link"><i class="icon-stop"></i></button>
+                <td><button class="btn"><i class="icon-stop" data-color='#000000'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#333333'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#666666'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#999999'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#bbbbbb'></i></button></td>
+                <td><button class="btn"><i class="icon-stop" data-color='#ffffff'></i></button></td>
+            </tr>
+            <tr>
+                <td colspan="6">
+                    <input class="color-value input-block-level <%= selector %>" type="text" placeholder="HTML color value"/>
                 </td>
             </tr>
-       
+        </table>
+
     </script>
 
     <script id="tpl-attribute-report" type="text/template">
@@ -181,17 +151,17 @@ div.tableContainer {
            <tr>
                <th>Default</th>
                <td><input type="radio" value='default' name="labels" id="labels-default" checked='true'/></td>
-               <td><input type="radio" value='default' name="fill-color" id="fill-color-default" checked='true'/></td>
-               <td><input type="radio" value='default' name="fill-opacity" id="fill-opacity-default" checked='true'/></td>
+               <td><input type="radio" value='default' name="polygon-fill" id="fill-color-default" checked='true'/></td>
+               <td><input type="radio" value='default' name="polygon-opacity" id="fill-opacity-default" checked='true'/></td>
                <td><input type="radio" value='default' name="line-color" id="line-color-default" checked='true'/></td>
                <td><input type="radio" value='default' name="line-opacity" id="line-opacity-default" checked='true'/></td>
                <td><input type="radio" value='default' name="point-size" id="point-size-default" checked='true'/></td>
            </tr>
-            <tr>
+           <tr>
                <th>Uniform</th>
                <td>N/A</td>
-               <td><input type="radio" value='uniform' name="fill-color" id="fill-color-uniform"/></td>
-               <td><input type="radio" value='uniform' name="fill-opacity" id="fill-opacity-uniform"/></td>
+               <td><input type="radio" value='uniform' name="polygon-fill" id="fill-color-uniform"/></td>
+               <td><input type="radio" value='uniform' name="polygon-opacity" id="fill-opacity-uniform"/></td>
                <td><input type="radio" value='uniform' name="line-color" id="line-color-uniform"/></td>
                <td><input type="radio" value='uniform' name="line-opacity" id="line-opacity-uniform"/></td>
                <td><input type="radio" value='uniform' name="point-size" id="point-size-uniform"/></td>
