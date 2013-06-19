@@ -1,3 +1,4 @@
+import json
 from lxml import etree
 import mapnik
 from collections import OrderedDict
@@ -9,6 +10,7 @@ import sh
 from datetime import datetime
 from urllib2 import urlopen
 import requests
+import re
 
 VECTOR = False
 RASTER = True
@@ -79,32 +81,58 @@ class Driver(object):
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
         raise NotImplementedError("Method get_data_for_point is not implemented in abstract class")
 
-def compile_layer(parent, layer_id, srs, **parameters):
-    layer = etree.SubElement(parent, "Layer")
-    layer.set("id", layer_id)
-    layer.set("srs", srs)
-    ds = etree.SubElement(layer, 'Datasource')
+#
+# See below.  I switched this to Carto, which requires JSON files instead of XML.
+#
+#def compile_layer(parent, layer_id, srs, **parameters):
+#    layer = etree.SubElement(parent, "Layer")
+#    layer.set("id", layer_id)
+#    layer.set("srs", srs)
+#    ds = etree.SubElement(layer, 'Datasource')
+#
+#    for name, value in parameters.items():
+#        p = etree.SubElement(ds, 'Parameter')
+#        p.set("name", name)
+#        p.text = value
+#    return layer
 
-    for name, value in parameters.items():
-        p = etree.SubElement(ds, 'Parameter')
-        p.set("name", name)
-        p.text = value
-    return layer
+#def compile_mml(srs, stylesheets, *layers):
+#    mapfile = etree.Element('Map')
+#    mapfile.set("srs", srs)
+#    for stylesheet in stylesheets:
+#        # etree.SubElement(map, "Stylesheet").text = open(stylesheet).read()
+#        etree.SubElement(mapfile, "Stylesheet").text = stylesheet
+#    for layer_id, lsrs, parms in layers:
+#        compile_layer(mapfile, layer_id, lsrs, **parms)
+#    return mapfile
+
+#def compile_mapfile(name, srs, stylesheets, *layers):
+#    with open(name + ".mml", 'w') as mapfile:
+#        mapfile.write(etree.tostring(compile_mml(srs, stylesheets, *layers), pretty_print=True))
+#    sh.cascadenik(name + '.mml', name + '.xml')
+
+
+def compile_layer(layer_id, srs, **parameters):
+    return {
+        "id" : re.sub('/', '_', layer_id),
+        "name" : re.sub('/', '_', layer_id),
+        "srs" : srs,
+        "Datasource" : parameters
+    }
 
 def compile_mml(srs, stylesheets, *layers):
-    mapfile = etree.Element('Map')
-    mapfile.set("srs", srs)
-    for stylesheet in stylesheets:
-        # etree.SubElement(map, "Stylesheet").text = open(stylesheet).read()
-        etree.SubElement(mapfile, "Stylesheet").text = stylesheet
-    for layer_id, lsrs, parms in layers:
-        compile_layer(mapfile, layer_id, lsrs, **parms)
-    return mapfile
+    mml = {
+        'srs' : srs,
+        'Stylesheet' : [{ "id" : re.sub('/', '_', stylesheet.slug), "data" : stylesheet.stylesheet} for stylesheet in stylesheets],
+        'Layer' : [compile_layer(layer_id, lsrs, **parms) for layer_id, lsrs, parms in layers]
+    }
+    return mml
+
 
 def compile_mapfile(name, srs, stylesheets, *layers):
     with open(name + ".mml", 'w') as mapfile:
-        mapfile.write(etree.tostring(compile_mml(srs, stylesheets, *layers), pretty_print=True))
-    sh.cascadenik(name + '.mml', name + '.xml')
+        mapfile.write(json.dumps(compile_mml(srs, stylesheets, *layers), indent=4))
+    sh.carto(name + '.mml', _out=name + '.xml')
 
 
 def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
@@ -133,7 +161,7 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
 
     stylesheet_objects = [m.Style.objects.get(slug=style) for style in styles]
     if not os.path.exists(cached_filename + ".xml"):  # not an else as previous clause may remove file.
-        stylesheets = [style.stylesheet for style in stylesheet_objects]
+        stylesheets = [style for style in stylesheet_objects]
         try:
             compile_mapfile(cached_filename, srs, stylesheets, *layer_specs)
         except sh.ErrorReturnCode_1, e:

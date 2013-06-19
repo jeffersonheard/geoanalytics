@@ -72,12 +72,6 @@ class StylerView(TemplateView):
 
         return ctx
 
-def render_point(request):
-    """
-    Use PIL to render a graphic point, because Mapnik is stupid about points, render it to a temporary file, and return
-    the filename, or something like that anyway.
-    """
-
 class SaveStyleView(View):
 
     #
