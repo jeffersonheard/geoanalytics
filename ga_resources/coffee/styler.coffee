@@ -1,4 +1,3 @@
-
 $ ->
 
   # @style
@@ -138,9 +137,26 @@ $ ->
   ######################################################################################################################
   
   # view for the 24 color "standard" palette.
-  StdPaletteView = Marionette.ItemView.extend
+  StdPaletteView = Backbone.Marionette.ItemView.extend
     template: "#tpl-standard-palette"
-    tagName: "table"
+    tagName: "div"
+    className: "btn-group"
+
+    initialize: (opts) ->
+      this.model = new Backbone.Model opts
+
+    events:
+      'click button': "onChangeColor"
+
+    onChangeColor: (evt) ->
+      $("input[type=text]", this.$el).val $("i", $(evt.currentTarget)).attr('data-color')
+
+    onRender: ->
+      this.$el.attr "data-toggle", "buttons-radio"
+      $("i", this.$el).each ->
+        color = $(this).data "color"
+        $(this).attr "style", "color: #{color}"
+
 
   
   BrewerPaletteView = Backbone.Marionette.ItemView.extend
@@ -269,6 +285,10 @@ $ ->
   UniformOpacityView = Backbone.Marionette.ItemView.extend
     template: "#tpl-uniform-opacity"
 
+    initialize: (opts) ->
+      this.model = new Backbone.Model opts
+
+
   # @labels
   #
   # Code dealing with labels
@@ -350,6 +370,10 @@ $ ->
   UniformPointSizeView = Backbone.Marionette.ItemView.extend
     template: "#tpl-uniform-point-size"
 
+    initialize: (opts) ->
+      this.model = new Backbone.Model opts
+
+
   # @attr-styler
   #
   # Code to render the attribute-styler table at the top of the page
@@ -367,6 +391,7 @@ $ ->
     if attribute isnt 'default'
       window.styler[region].show if attribute is 'uniform'
         new uniformView
+          attribute: selector
           selector: selector
       else
         new attributedView

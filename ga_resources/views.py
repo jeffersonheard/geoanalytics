@@ -5,6 +5,29 @@ import json
 from django.http import HttpResponse, HttpResponseRedirect
 import numpy as np
 from osgeo import osr
+import importlib
+from mezzanine.pages.models import Page
+from mezzanine.utils.urls import admin_url
+
+def create_page(request):
+    models = request.GET['module']
+    pageclass = request.GET['classname']
+    parent = request.GET['parent']
+
+    parent = Page.objects.get(slug=parent).get_content_model()
+    models = importlib.import_module(models)
+    pageclass = getattr(models, pageclass)
+
+    title = request.GET.get('title', "new " + pageclass._meta.object_name)
+    # page = pageclass.objects.create(title=title, parent=parent)
+    return HttpResponseRedirect(admin_url(pageclass, 'add') + "?parent={pk}&next={next}".format(pk=parent.pk, next=parent.get_absolute_url()))
+
+def delete_page(request):
+    slug = request.GET['slug']
+    p = Page.objects.get(slug=slug)
+    to = p.parent if p.parent else '/'
+    p.delete()
+    return HttpResponseRedirect(to.get_absolute_url())
 
 class StylerView(TemplateView):
     template_name = 'ga_resources/styler.html'
@@ -48,12 +71,6 @@ class StylerView(TemplateView):
         ctx['attrs'] = json.dumps(ctx['attrs'], indent=2)
 
         return ctx
-
-def render_point(request):
-    """
-    Use PIL to render a graphic point, because Mapnik is stupid about points, render it to a temporary file, and return
-    the filename, or something like that anyway.
-    """
 
 class SaveStyleView(View):
 

@@ -93,28 +93,8 @@ class Style(AbstractPageResource):
         queryset = models.Style.objects.all()
         resource_name = "style"
 
-
-class StyleTemplate(AbstractPageResource):
-    class Meta(BaseMeta):
-        queryset = models.StyleTemplate.objects.all()
-        resource_name = "template"
-
-
-class StyleTemplateVariable(AbstractPageResource):
-    class Meta(BaseMeta):
-        queryset = models.StyleTemplateVariable.objects.all()
-        resource_name = "variable"
-
 styles = Api()
 styles.register(Style())
-styles.register(StyleTemplate())
-styles.register(StyleTemplateVariable())
-
-
-class AnimatedResourceLayer(AbstractPageResource):
-    class Meta(BaseMeta):
-        queryset = models.AnimatedResourceLayer.objects.all()
-        resource_name = 'animated_layer'
 
 
 class RenderedLayer(AbstractPageResource):
@@ -128,5 +108,4 @@ class RenderedLayer(AbstractPageResource):
 
 
 layers = Api()
-layers.register(AnimatedResourceLayer())
 layers.register(RenderedLayer())
