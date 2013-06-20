@@ -29,7 +29,10 @@ scientific geographic data.  It has been used in 11 projects at RENCI in:
 ## Contribute!
 
 We are actively seeking collaborators and contributors that can help grow the 
-usage and sustainability of the Geoanalytics endeavor.
+usage and sustainability of the Geoanalytics endeavor.  The biggest thing we
+need right now is documentation.  If you can read Python code and write 
+readable documentation either as developer or user documentation, we need your
+skills!
 
 ## Geoanalytics purpose
 
