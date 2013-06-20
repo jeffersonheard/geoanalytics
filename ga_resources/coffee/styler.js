@@ -303,9 +303,27 @@
     });
     window.schema = new Schema(window.attributes);
     window.brewerPalettes = new BrewerPaletteCollection(paletteNames);
-    StdPaletteView = Marionette.ItemView.extend({
+    StdPaletteView = Backbone.Marionette.ItemView.extend({
       template: "#tpl-standard-palette",
-      tagName: "table"
+      tagName: "div",
+      className: "btn-group",
+      initialize: function(opts) {
+        return this.model = new Backbone.Model(opts);
+      },
+      events: {
+        'click button': "onChangeColor"
+      },
+      onChangeColor: function(evt) {
+        return $("input[type=text]", this.$el).val($("i", $(evt.currentTarget)).attr('data-color'));
+      },
+      onRender: function() {
+        this.$el.attr("data-toggle", "buttons-radio");
+        return $("i", this.$el).each(function() {
+          var color;
+          color = $(this).data("color");
+          return $(this).attr("style", "color: " + color);
+        });
+      }
     });
     BrewerPaletteView = Backbone.Marionette.ItemView.extend({
       template: "#tpl-brewer-palette",
@@ -445,7 +463,10 @@
       }
     });
     UniformOpacityView = Backbone.Marionette.ItemView.extend({
-      template: "#tpl-uniform-opacity"
+      template: "#tpl-uniform-opacity",
+      initialize: function(opts) {
+        return this.model = new Backbone.Model(opts);
+      }
     });
     LabelStylerView = Backbone.Marionette.ItemView.extend({
       template: "#tpl-label-styler",
@@ -535,7 +556,10 @@
       }
     });
     UniformPointSizeView = Backbone.Marionette.ItemView.extend({
-      template: "#tpl-uniform-point-size"
+      template: "#tpl-uniform-point-size",
+      initialize: function(opts) {
+        return this.model = new Backbone.Model(opts);
+      }
     });
     AttributeStylerItemView = Backbone.Marionette.ItemView.extend({
       template: "#tpl-style-by-attribute",
@@ -555,6 +579,7 @@
         window.styler[region].reset();
         if (attribute !== 'default') {
           return window.styler[region].show(attribute === 'uniform' ? new uniformView({
+            attribute: selector,
             selector: selector
           }) : new attributedView({
             model: window.schema.find(function(k) {

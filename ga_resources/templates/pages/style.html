@@ -1,6 +1,7 @@
 {% extends "pages/page.html" %}
 
-{% load mezzanine_tags %}
+{% load mezzanine_tags pages_tags %}
+{% set_page_permissions %}
 
 {% block main %}{{ block.super }}
     {% editable page.title %}

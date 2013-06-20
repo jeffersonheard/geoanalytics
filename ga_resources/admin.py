@@ -18,14 +18,13 @@ from ga_resources.models import *
 #        "time_represented","perform_caching","cache_ttl","data_cache","bounding_box","kind","driver"
 #    )}),)
 
+admin.site.register(CatalogPage, PageAdmin)
+#admin.site.register(Verb, PageAdmin)
 admin.site.register(DataResource, PageAdmin)
 admin.site.register(ResourceGroup, PageAdmin)
 admin.site.register(OrderedResource)
 
 admin.site.register(AncillaryResource, PageAdmin)
-admin.site.register(AnimatedResourceLayer, PageAdmin)
 
 admin.site.register(RenderedLayer, PageAdmin)
 admin.site.register(Style, PageAdmin)
-admin.site.register(StyleTemplate, PageAdmin)
-admin.site.register(StyleTemplateVariable)
