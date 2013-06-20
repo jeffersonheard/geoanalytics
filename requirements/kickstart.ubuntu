@@ -1,5 +1,6 @@
 apt-get install aptitude
 # Dependencies for Mapnik
+aptitude install carto
 aptitude install build-essential
 aptitude install libboost-all-dev 
 aptitude install libtiff-dev
