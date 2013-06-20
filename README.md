@@ -80,3 +80,7 @@ a number of reusable apps that work in concert:
 * ga\_irods : A connection to the [IRODS](http://www.irods.org) data grid
   software for distributed computing and policy based data storage
 
+## Licensing
+
+Geoanalytics is licensed under an MIT-style license.  See LICENSE.txt for 
+details
