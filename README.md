@@ -1,83 +1,82 @@
-# Installation instructions for Geoanalytics (GA)
-These instructions assume you will install Geoanalytics in your home directory.
+# Geoanalytics 
 
-## Clone GA from GitHub
-    git clone https://github.com/JeffHeard/ga_cms.git
-### Switch to develop branch
-    git branch develop
+Content, Collaboration, and Analytics for Geography.
 
-## Install required packages for Mapnik and Geoanalytics
-    cd ga_cms
-    sh requirements/kickstart.ubuntu
+## About Geoanalytics
 
-## Install Mapnik 2.1.0
-    wget https://github.com/mapnik/mapnik/archive/v2.1.0.tar.gz
-    tar xvzf mapnik-2.1.0.tar.gz 
-    cd mapnik-2.1.0/
-    ./configure 
-    make
-    sudo make install
+Geoanalytics is an Open Source spatial data and analytics infrastructure based
+around unifying many of the open source python geography projects into a
+content management and collaboration framework. Geoanalytics is meant to be a
+framework that handles both classical and exotic formats in a unified way,
+setting up a system of drivers that connect these data sources to web services.
 
-## Setup virtual env
-    cd ~ 
-    virtualenv --system-site-packages --distribute geoanalytics
-    cd geoanalytics/
-    source bin/activate [use this step in the future to jump into the virtual env.]
+From there, data can be catalogued, described, queried, and Geoanalytics' CMS
+can serve as a host to a myriad of domain-specific applications. 
 
-### Install GA python modules within the virtual env
-  cd ga_cms
-  sh install.sh
+Geoanalytics was developed at [RENCI](http://www.renci.org) to deal with
+various projects centered around providing application infrastructure around
+scientific geographic data.  It has been used in 11 projects at RENCI in:
 
-## Create PostGIS database (see https://docs.djangoproject.com/en/dev/ref/contrib/gis/install/postgis/)
-### Create database user
-    sudo su - postgres
-    createuser geoanalytics
+* Environemtnal sciences (hydrology, weather modeling)
+* Earth science
+* Epidemiology
+* Public health
+* Decision support
+* Emergency management and mitigation
+* Digital humanities
+* Digital media
 
-Say yes to the folowing questions
-> Shall the new role be a superuser? (y/n) n
-> Shall the new role be allowed to create databases? (y/n) y
-> Shall the new role be allowed to create more new roles? (y/n) n
+## Contribute!
 
-### Set postgres passwords
-    psql
-    alter user postgres encrypted password 'YOURSECRETPASSWORD';
-    alter user geoanalytics encrypted password 'YOUROTHERSECRETPASSWORD';
-    \q
+We are actively seeking collaborators and contributors that can help grow the 
+usage and sustainability of the Geoanalytics endeavor.
 
-### Create the DB (first log out of postgres shell we su'ed into)
-    createdb geoanalytics
+## Geoanalytics purpose
 
-## Set up PostGIS spatial extensions on the database
-### PostGIS 2 and PostgreSQL 9.1+
-    psql geoanalytics
-    CREATE EXTENSION postgis;
-    CREATE EXTENSION postgis_topology;
+Geography used to be the exclusive domain of GIS systems such as ArcGIS and
+MapInfo.  Web-mapping, data APIs such as those provided by Facebook, Twitter,
+and the like, and huge datasets like those that come from NASA have become far
+more important to the average researcher and are difficult to work with in
+these traditional platforms.  
 
-### Older version of PostGIS
-The above won't work and you will see an error such as:
+Geoanalytics' lofty goal is to solve this problem and provide a mechanism for
+analytists, experts, and researchers to use these data in a way that's
+fundamentally easier and more fluid than current tools provide. 
 
-> ERROR:  could not open extension control file "/usr/share/postgresql/9.1/extension/postgis.control": No such file or directory
+We also aim to provide a way to publish map data in a way that treats 
+maps, cartography, and visualization as "not special." We aim for publishing
+tools that are more like Wordpress than they are like Apache Server. 
 
-In this case, create a template postgis database:
+## Geoanalytics structure
 
-    sudo su - postgres
-    sh requirements/create_template_postgis-debian.sh (or use another script from: https://docs.djangoproject.com/en/dev/ref/contrib/gis/install/postgis/)
+Geoanalytics is based around treating data sources as curated content, and 
+on supporting the development of applications and data APIs that enable people
+to work with data through a unified, well-understood interface.  Toward this,
+we embrace OGC standards for interoperability and will work actively to support
+and more fully implement these standards.
 
-### Create your database from the PostGIS template
-createdb -T template_postgis geoanalytics
+We also follow and embrace open source projects in geography and cartography 
+that have gained community traction and where these are more widely used or 
+more capable than current OGC standards, we adopt these instead.  For example,
+rendering maps is provided by [Mapnik](https://www.github.com/mapnik/mapnik)
+and stylesheets are compiled through [Carto](http://www.mapbox.com/carto). 
 
-## Edit DATABASES section of settings.py as follows
-> "ENGINE": "django.contrib.gis.db.backends.postgresql_psycopg2"
-> "NAME": "geoanalytics"
-> "USER": "geoanalytics"
-> "PASSWORD": "YOUROTHERSECRETPASSWORD"
+Geoanalytics is deployed as a Django project (not an app - see
+[Mezzanine](http://mezzanine.jupo.org)'s explanation as to why), incorporating
+a number of reusable apps that work in concert:
 
-## Initialize the database from the geoanalytics/geodjango side
-    python manage.py syncdb
-> Say yes when promted to create a Django superuser
-    python manage.py migrate
-
-## Run the server
-    python manage.py runserver
-
+* ga\_resources : Data publishing, semantics, and metadata.  WMS and soon to be
+  WFS web services that provide OGC standard ways of accessing and visualizing
+  datasets on a map or providing them to be consumed GIS or analytics systems
+  like Arc, SAS, or qGIS.  
+* ga\_bigboard : A collaborative environment that provides "teleconferencing
+  over maps". Layering, drawing, and real-time conferencing system for decision 
+  support and education.
+* ga\_interactive : An interactive shell built on IPython Notebook that allows
+  power users (analysts and so on) to hack the system from inside a
+  web-browser, analyzing data using high-performance libraries, the GRASS GIS,
+  or other libraries.
+* ga\_ows : WMS and WFS webservice code that can be adapted to projects.
+* ga\_irods : A connection to the [IRODS](http://www.irods.org) data grid
+  software for distributed computing and policy based data storage
 
