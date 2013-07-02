@@ -8,6 +8,10 @@
         {{ page.dataresource.content|richtext_filter|safe }}
     {% endeditable %}
 
+    <div class="alert">
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+        Last updated {{ page.dataresource.last_refresh|date:"l, F j Y, f a " }}
+    </div>
     <hr>
 
     <h3>Layer boundaries</h3>

@@ -1,4 +1,5 @@
 import json
+from django.utils.timezone import utc
 from lxml import etree
 import mapnik
 from collections import OrderedDict
@@ -11,6 +12,8 @@ from datetime import datetime
 from urllib2 import urlopen
 import requests
 import re
+from django.conf import settings
+from hashlib import md5
 
 VECTOR = False
 RASTER = True
@@ -56,12 +59,26 @@ class Driver(object):
         else:
             return False
 
+
+
     def ready_data_resource(self, **kwargs):
         """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
         raise NotImplementedError("Method ready_data_resource not implemented in abstract class")
 
     def compute_fields(self, **kwargs):
-        raise NotImplementedError("Method compute_fields not implemented in abstract class")
+        self.ensure_local_file()
+
+        filehash = md5()
+        with open(self.cached_basename + self.src_ext) as f:
+            b = f.read(10 * 1024768)
+            while b:
+                filehash.update(b)
+                b = f.read(10 * 1024768)
+
+        md5sum = filehash.hexdigest()
+        if md5sum != self.resource.md5sum:
+            self.resource.md5sum = md5sum
+            self.resource.last_change = datetime.utcnow().replace(tzinfo=utc)
 
     def get_metadata(self, **kwargs):
         """If there is metadata conforming to some standard, then return it here"""
@@ -76,7 +93,6 @@ class Driver(object):
     def get_filename(self, xtn):
         filename = os.path.split(self.resource.slug)[-1]
         return os.path.join(self.cache_path, filename + '.' + xtn)
-
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
         raise NotImplementedError("Method get_data_for_point is not implemented in abstract class")
@@ -132,7 +148,8 @@ def compile_mml(srs, stylesheets, *layers):
 def compile_mapfile(name, srs, stylesheets, *layers):
     with open(name + ".mml", 'w') as mapfile:
         mapfile.write(json.dumps(compile_mml(srs, stylesheets, *layers), indent=4))
-    sh.carto(name + '.mml', _out=name + '.xml')
+    carto = sh.Command(settings.CARTO_HOME + "/bin/carto")
+    carto(name + '.mml', _out=name + '.xml')
 
 
 def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):

@@ -3,22 +3,23 @@ from django.conf import settings as s
 from django.contrib.gis.geos import Polygon
 import os
 import sh
-import requests
 from osgeo import osr, ogr
 from . import Driver, VECTOR
-import time
 from pandas import DataFrame
 from shapely import geometry, wkb
-from urllib2 import urlopen
 import shutil
 from django.template.defaultfilters import slugify
 import re
-from datetime import datetime
+import json
 
 DATA_TYPE = VECTOR
 
 def ogrfield(elt):
     return re.sub('-', '_', slugify(elt).encode('ascii'))[0:10]
+
+def identity(x):
+    return '"' + x + '"' if isinstance(x, basestring) else str(x)
+
 
 class ShapefileDriver(Driver):
     DATA_TYPE = VECTOR
@@ -68,13 +69,13 @@ class ShapefileDriver(Driver):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        self.ensure_local_file(True)
+        super(ShapefileDriver, self).compute_fields(**kwargs)
 
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shp')))
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shx')))
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.dbf')))
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.prj')))
-        sh.unzip("-o", self.self.cached_basename + self.src_ext, '-d', self.cache_path)
+        sh.unzip("-o", self.cached_basename + self.src_ext, '-d', self.cache_path)
         sh.mv(sh.glob(os.path.join(self.cache_path, '*.shp')), self.cached_basename + '.shp')
         sh.mv(sh.glob(os.path.join(self.cache_path, '*.shx')), self.cached_basename + '.shx')
         sh.mv(sh.glob(os.path.join(self.cache_path, '*.dbf')), self.cached_basename + '.dbf')
@@ -134,7 +135,41 @@ class ShapefileDriver(Driver):
             lyr.SetSpatialFilter(ogr.CreateGeometryFromWkt(wkt))
         return [f.items() for f in lyr]
 
-    def as_dataframe(self):
+    def attrquery(self, key, value):
+        key, op = key.split('__')
+        op = {
+            'gt' : ">",
+            'gte' : ">=",
+            'lt' : "<",
+            'lte' : '<=',
+            'startswith' : 'LIKE',
+            'endswith' : 'LIKE',
+            'istartswith' : 'ILIKE',
+            'iendswith' : 'ILIKE',
+            'icontains' : "ILIKE",
+            'contains' : "LIKE",
+            'in' : 'IN',
+            'ne' : "<>"
+        }[op]
+
+        value = {
+            'gt': identity,
+            'gte': identity,
+            'lt': identity,
+            'lte': identity,
+            'startswith': lambda x : '%' + x,
+            'endswith': lambda x : x + '%',
+            'istartswith': lambda x : '%' + x,
+            'iendswith': lambda x : x + '%',
+            'icontains': lambda x : '%' + x + '%',
+            'contains': lambda x: '%' + x + '%',
+            'in': lambda x: x if isinstance(x, basestring) else '(' + ','.join(identity(a) for a in x) + ')',
+            'ne': identity
+        }[op](value)
+
+        return ' '.join([key, op, value])
+
+    def as_dataframe(self, **kwargs):
         """
         Creates a dataframe object for a shapefile's main layer using layer_as_dataframe. This object is cached on disk for
         layer use, but the cached copy will only be picked up if the shapefile's mtime is older than the dataframe's mtime.
@@ -145,7 +180,52 @@ class ShapefileDriver(Driver):
 
         dfx_path = self.get_filename('dfx')
         shp_path = self.get_filename('shp')
-        if hasattr(self, '_df'):
+
+        if len(kwargs) != 0:
+            ds = ogr.Open(shp_path)
+            lyr = ds.GetLayerByIndex(0)
+            crx=None
+
+            if 'bbox' in kwargs:
+                minx,miny,maxx,maxy = kwargs['bbox']
+                if 'srs' in kwargs:
+                    s_srs = osr.SpatialReference()
+                    if kwargs['srs'].lower().startswith('epsg:'):
+                        s_srs.ImportFromEPSG(int(kwargs['srs'].split(':')[1]))
+                    else:
+                        s_srs.ImportFromProj4(kwargs['srs'])
+
+                    t_srs = self.resource.srs
+
+                    if s_srs.ExportToProj4() != t_srs.ExportToProj4():
+                        crx = osr.CoordinateTransformation(s_srs, t_srs)
+                        minx, miny, _ = crx.TransformPoint(minx, miny)
+                        maxx, maxy, _ = crx.TransformPoint(maxx, maxy)
+
+
+                lyr.SetSpatialFilterRect(minx, miny, maxx, maxy)
+            if 'query' in kwargs:
+                if isinstance(kwargs['query'], basestring):
+                    query = json.loads(kwargs['query'])
+                else:
+                    query = kwargs['query']
+
+                for key, value in query.items():
+                    attrq= self.attrquery(key, value) if '__' in key else key, '='
+                    lyr.SetAttributeFilter(attrq)
+
+            def transform(geom, crx):
+                if crx:
+                    geom.transform(crx)
+                return geom
+
+            df = DataFrame.from_records(
+                data=[dict(fid=f.GetFID(), geometry=wkb.loads(transform(f.geometry(), crx).ExportToWkb()), **f.items()) for f in lyr if
+                      f.geometry()],
+                index='fid'
+            )
+            return df
+        elif hasattr(self, '_df'):
             return self._df
 
         elif os.path.exists(dfx_path) and os.stat(dfx_path).st_mtime >= os.stat(shp_path).st_mtime:
