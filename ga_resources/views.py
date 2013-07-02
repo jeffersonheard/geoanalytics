@@ -353,7 +353,7 @@ class WFSAdapter(wfs.WFSAdapter):
         else:
             return self.AdHocQuery(request, **parms.cleaned_data)
 
-    def AdHocQuery(self, request,
+    def AdHocQuery(self, req,
        type_names=None,
        filter=None,
        filter_language=None,
@@ -367,7 +367,7 @@ class WFSAdapter(wfs.WFSAdapter):
        **kwargs
     ):
         model = get_object_or_404(models.DataResource, slug=type_names[0])
-        driver = model._driver_instance
+        driver = model.driver_instance
 
         extra = {}
         if filter:
@@ -379,26 +379,30 @@ class WFSAdapter(wfs.WFSAdapter):
         if srs_name:
             srs = osr.SpatialReference()
             if srs_name.lower().startswith('epsg'):
-                srs.ImportFromEPSG(srs_name)
+                srs.ImportFromEPSG(int(srs_name[5:]))
             else:
                 srs.ImportFromProj4(srs_name)
             extra['srs'] = srs
         else:
             srs = model.srs
 
-        df = driver.as_data_frame(**extra)
-
         if start_index:
-            df = df[start_index:]
+            extra['start'] = start_index
 
         count = count or max_features
         if count:
-            df = df[:count]
+            extra['count'] = count
+
+        if "boundary" in kwargs:
+            extra['boundary'] = kwargs['boundary']
+            extra['boundary_type'] = kwargs['boundary_type']
+
+        df = driver.as_dataframe(**extra)
 
         if sort_by:
-            pass
+            extra['sort_by'] = sort_by
 
-        if filter_language != 'json':
+        if filter_language and filter_language != 'json':
             raise wfs.OperationNotSupported('filter language must be JSON for now')
 
         filename = md5()
@@ -416,3 +420,7 @@ class WFSAdapter(wfs.WFSAdapter):
 
     def supports_feature_versioning(self):
         return False
+
+class WFS(wfs.WFS):
+    adapter=WFSAdapter()
+

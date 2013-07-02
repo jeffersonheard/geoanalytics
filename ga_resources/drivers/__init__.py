@@ -13,7 +13,7 @@ from urllib2 import urlopen
 import requests
 import re
 from django.conf import settings
-from hashlib import md5
+from ga_resources import predicates
 
 VECTOR = False
 RASTER = True
@@ -96,6 +96,39 @@ class Driver(object):
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
         raise NotImplementedError("Method get_data_for_point is not implemented in abstract class")
+
+    def as_dataframe(self, **kwargs):
+        raise NotImplementedError("This driver does not support dataframes")
+
+    def summary(self, **kwargs):
+        df = self.as_dataframe(**kwargs)
+        keys = [k for k in df.keys() if k != 'geometry']
+        type_table = {
+            'float64': 'number',
+            'int64': 'number',
+            'object': 'text'
+        }
+
+        ctx = [{'name': k} for k in keys]
+        for i, k in enumerate(keys):
+            s = df[k]
+            ctx[i]['kind'] = type_table[s.dtype.name]
+            ctx[i]['tags'] = [tag for tag in [
+                'unique' if predicates.unique(s) else None,
+                'not null' if predicates.not_null(s) else None,
+                'null' if predicates.some_null(s) else None,
+                'empty' if predicates.all_null(s) else None,
+                'categorical' if predicates.categorical(s) else None,
+                'open ended' if predicates.continuous(s) else None,
+                'mostly null' if predicates.mostly_null(s) else None,
+                'uniform' if predicates.uniform(s) else None
+            ] if tag]
+            if 'categorical' in ctx[i]['tags']:
+                ctx[i]['uniques'] = [x for x in s.unique()]
+            for k, v in s.describe().to_dict().items():
+                ctx[i][k] = v
+
+        return ctx
 
 #
 # See below.  I switched this to Carto, which requires JSON files instead of XML.
