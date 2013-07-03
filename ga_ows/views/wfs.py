@@ -261,7 +261,7 @@ class GeoDjangoWFSAdapter(WFSAdapter):
 
     def get_features(self, request, parms):
         if parms.cleaned_data['stored_query_id']:
-            squid = "SQ_" + params.cleaned_data['stored_query_id']
+            squid = "SQ_" + parms.cleaned_data['stored_query_id']
             try: 
                 return self.__getattribute__(squid)(request, parms)
             except AttributeError:
@@ -284,7 +284,7 @@ class GeoDjangoWFSAdapter(WFSAdapter):
         sort_by = parms.cleaned_data['sort_by']
         count = parms.cleaned_data['count']
         if not count:
-            count = parms.cleand_data['max_features']
+            count = parms.cleaned_data['max_features']
         start_index = parms.cleaned_data['start_index']
         srs_name = parms.cleaned_data['srs_name'] # assume bbox is in this
         srs_format = parms.cleaned_data['srs_format'] # this can be proj, None (srid), srid, or wkt.

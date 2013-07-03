@@ -3,11 +3,14 @@ from ga_resources import models, drivers, predicates
 from django.views.generic import TemplateView, View
 import json
 from django.http import HttpResponse, HttpResponseRedirect
+from ga_resources.drivers import shapefile
 import numpy as np
-from osgeo import osr
+from osgeo import osr, ogr
 import importlib
 from mezzanine.pages.models import Page
 from mezzanine.utils.urls import admin_url
+from django.shortcuts import get_object_or_404, get_list_or_404
+from hashlib import md5
 
 def create_page(request):
     models = request.GET['module']
@@ -314,3 +317,110 @@ class WMSAdapter(wms.WMSAdapterBase):
 
 class WMS(wms.WMS):
     adapter = WMSAdapter([])
+
+class WFSAdapter(wfs.WFSAdapter):
+    def get_feature_descriptions(self, request, *types):
+        namespace = request.build_absolute_uri().split('?')[0] + "/schema" # todo: include https://bitbucket.org/eegg/django-model-schemas/wiki/Home
+
+        for type_name in types:
+            res = get_object_or_404(models.DataResource, slug=type_name)
+
+            yield wfs.FeatureDescription(
+                ns=namespace,
+                ns_name='ga_resources',
+                name=res.slug,
+                abstract=res.description,
+                title=res.title,
+                keywords=res.keywords,
+                srs=res.spatial_metadata.native_srs,
+                bbox=res.spatial_metadata.bounding_box,
+                schema=namespace + '/' + res.slug
+            )
+
+    def list_stored_queries(self, request):
+        """list all the queries associated with drivers"""
+        sq = super(WFSAdapter, self).list_stored_queries(request)
+        return sq
+
+    def get_features(self, request, parms):
+        if parms.cleaned_data['stored_query_id']:
+            squid = "SQ_" + parms.cleaned_data['stored_query_id']
+            slug = parms.cleaned_data['type_names'] if isinstance(parms.cleaned_data['type_names'], basestring) else parms.cleaned_data['type_names'][0]
+            try:
+                return models.DataResource.driver_instance.query_operation(squid)(request, **parms.cleaned_data)
+            except:
+                raise wfs.OperationNotSupported.at('GetFeatures', 'stored_query_id={squid}'.format(squid=squid))
+        else:
+            return self.AdHocQuery(request, **parms.cleaned_data)
+
+    def AdHocQuery(self, req,
+       type_names=None,
+       filter=None,
+       filter_language=None,
+       bbox=None,
+       sort_by=None,
+       count=None,
+       start_index=None,
+       srs_name=None,
+       srs_format=None,
+       max_features=None,
+       **kwargs
+    ):
+        model = get_object_or_404(models.DataResource, slug=type_names[0])
+        driver = model.driver_instance
+
+        extra = {}
+        if filter:
+            extra['filter'] = json.loads(filter)
+
+        if bbox:
+            extra['bbox'] = bbox
+
+        if srs_name:
+            srs = osr.SpatialReference()
+            if srs_name.lower().startswith('epsg'):
+                srs.ImportFromEPSG(int(srs_name[5:]))
+            else:
+                srs.ImportFromProj4(srs_name)
+            extra['srs'] = srs
+        else:
+            srs = model.srs
+
+        if start_index:
+            extra['start'] = start_index
+
+        count = count or max_features
+        if count:
+            extra['count'] = count
+
+        if "boundary" in kwargs:
+            extra['boundary'] = kwargs['boundary']
+            extra['boundary_type'] = kwargs['boundary_type']
+
+        df = driver.as_dataframe(**extra)
+
+        if sort_by:
+            extra['sort_by'] = sort_by
+
+        if filter_language and filter_language != 'json':
+            raise wfs.OperationNotSupported('filter language must be JSON for now')
+
+        filename = md5()
+
+        filename.update("{name}.{bbox}.{srs_name}x{filter}".format(
+            name=type_names[0],
+            bbox=','.join(str(b) for b in bbox),
+            srs_name=srs_name,
+            filter=filter
+        ))
+        filename = filename.hexdigest()
+        shapefile.ShapefileDriver.from_dataframe(df, filename, srs)
+        ds = ogr.Open(filename)
+        return ds
+
+    def supports_feature_versioning(self):
+        return False
+
+class WFS(wfs.WFS):
+    adapter=WFSAdapter()
+

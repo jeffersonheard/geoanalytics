@@ -1,4 +1,4 @@
-{% extends "pages/page.html" %}
+{% extends "pages/page_nosidebars.html" %}
 
 {% load mezzanine_tags pages_tags %}
 {% set_page_permissions %}
@@ -8,26 +8,25 @@
         {{ page.dataresource.content|richtext_filter|safe }}
     {% endeditable %}
 
+    <div class="alert">
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+        Last updated {{ page.dataresource.last_refresh|date:"l, F j Y, f a " }}
+    </div>
     <hr>
 
     <h3>Layer boundaries</h3>
-    <div class='simple-map' id="map" style='width: 600px;'></div>
-
-    <h3>Data Fields</h3>
-    <dl>
-        {% for field in page.dataresource.driver_instance.get_data_fields %}
-            <dt>{{ field.0 }}</dt>
-            <dd>{{ field.1 }}</dd>
-        {% endfor %}
-    </dl>
+    <div class='simple-map' id="map" style='width: 100%; height:400px;'></div>
 
     <h3>Geographic web-services for this resource</h3>
 
     {% if page.dataresource.resource_file %}
-    <h5><a href="{{ page.dataresource.resource_file.url }}">Download the original resource file.</a></h5>
+        <h5><a href="{{ page.dataresource.resource_file.url }}">Download the original resource file.</a></h5>
     {% elif page.dataresource.resource_url %}
         <h5><a href="{{ page.dataresource.resource_url }}">Download the original resource file.</a></h5>
     {% endif %}
+
+    <h5><a href="/ga_resources/wfs/?service=wfs&request=GetFeature&version=2.0.0&typeNames={{ page.slug }}">OGC Web Feature Service (Suitable to import into QGIS or ArcGIS)</a>
+    </h5>
 
     {% if page.dataresource.renderedlayer_set.exists %}
         <dl>
@@ -41,9 +40,55 @@
             </dd>
         </dl>
     {% else %}
-        <i>No services associated with this resource</i>
+        <p><i>No styled layer services associated with this resource</i></p>
     {% endif %}
-    <a class="btn btn-primary" href="/ga_resources/styler/?resource={{ page.slug }}"><i class="icon-plus"></i> Create layer</a>
+    <a class="btn btn-primary" href="/ga_resources/styler/?resource={{ page.slug }}"><i class="icon-plus"></i> Create
+        layer</a>
+
+    <h3>Data Summary</h3>
+    {%  comment %}
+    <dl>
+        {% for field in page.dataresource.driver_instance.get_data_fields %}
+            <dt>{{ field.0 }}</dt>
+            <dd>{{ field.1 }}</dd>
+        {% endfor %}
+    </dl>
+    {% endcomment %}
+    <table class="table table-striped table-bordered" style='overflow:auto'>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Kind</th>
+                <th>Nonempty</th>
+                <th>Tags</th>
+                <th>Most frequent</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for field_summary in page.dataresource.driver_instance.summary %}
+            <tr>
+                <td><b>{{ field_summary.name }}</b></td>
+                <td>{{ field_summary.kind }}</td>
+                <td>{{ field_summary.count }}</td>
+                <td>{{ field_summary.tags|join:" / " }}</td>
+                <td>{{ field_summary.top }}</td>
+            </tr>
+            <tr class='extra-metadata'>
+                {% if field_summary.uniques %}
+                    <td colspan="5" class='unique-values'>{{ field_summary.uniques|join:" / " }}</td>
+                {% elif field_summary.mean %}
+                    <td></td>
+                    <td>Avg. {{ field_summary.mean|floatformat:3 }}</td>
+                    <td>Min. {{ field_summary.min|floatformat:3 }}</td>
+                    <td>Max. {{ field_summary.max|floatformat:3 }}</td>
+                    <td>Stddev. {{ field_summary.std|floatformat:3 }}</td>
+                {% endif %}
+            </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot></tfoot>
+    </table>
+
 
 {% endblock %}
 
@@ -76,7 +121,6 @@
             ]});
 
             map.zoomToExtent(bounds);
-
         });
     </script>
 {% endblock %}
@@ -93,5 +137,14 @@
     <![endif]-->
     <link rel="stylesheet" href="{{ STATIC_URL }}bootstrap/css/font-awesome.css">
     <link rel="stylesheet" href="{{ STATIC_URL }}css/ga_resources.css"/>
+
+    <style type="text/css">
+        .unique-values {
+            font-size: 9px;
+        }
+        .extra-metadata {
+            font-style: italic;
+        }
+    </style>
 
 {% endblock %}
