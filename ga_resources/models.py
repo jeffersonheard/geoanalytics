@@ -1,13 +1,22 @@
+from django.core.serializers import json
 from mezzanine.pages.models import Page
-from mezzanine.core.models import RichText
+from mezzanine.core.models import RichText, CONTENT_STATUS_DRAFT, CONTENT_STATUS_PUBLISHED
 from mezzanine.core.managers import SearchableManager
 from django.contrib.gis.db import models
-from django.db.models.signals import post_save, pre_delete
+from django.db.models.signals import post_save, pre_delete, pre_save
 from django.conf import settings as s
 import importlib
+from timedelta.fields import TimedeltaField
 import sh
 import os
 from osgeo import osr
+import datetime
+from django.utils.timezone import utc
+from hashlib import md5
+from logging import getLogger
+
+_log = getLogger('ga_resources')
+
 
 class CatalogPage(Page):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
@@ -78,6 +87,11 @@ class DataResource(Page, RichText):
     resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
     resource_url = models.URLField(null=True, blank=True)
     resource_config = models.TextField(null=True, blank=True)
+    last_change = models.DateTimeField(null=True, blank=True)
+    last_refresh = models.DateTimeField(null=True, blank=True) # updates happen only to resources that were not uploaded by the user.
+    next_refresh = models.DateTimeField(null=True, blank=True, db_index=True) # will be populated every time the update manager runs
+    refresh_every = TimedeltaField(null=True, blank=True)
+    md5sum = models.CharField(max_length=64, blank=True, null=True) # the unique md5 sum of the data
 
     metadata_url = models.URLField(null=True, blank=True)
     metadata_xml = models.TextField(null=True, blank=True)
@@ -105,16 +119,25 @@ class DataResource(Page, RichText):
         return self._driver_instance
 
     def modified(self):
-        print "purging cache for {slug}".format(slug=self.slug)
-
+        self.last_refresh = datetime.datetime.utcnow().replace(tzinfo=utc)
         if s.WMS_CACHE_DB.exists(self.slug):
             cached_filenames = s.WMS_CACHE_DB.smembers(self.slug)
             for filename in cached_filenames:
                 sh.rm('-rf', sh.glob(filename + "*"))
-
             sh.rm('-rf', self.cache_path)
-
             s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
+
+
+
+    def refresh(self):
+        """
+        Called by the automatic refresh mechanism
+
+        :return:
+        """
+        self.modified()
+        self.driver_instance.compute_fields()
+
 
     @property
     def cache_path(self):
@@ -123,17 +146,22 @@ class DataResource(Page, RichText):
             os.makedirs(p)  # just in case it's not there yet.
         return p
 
+def dataresource_pre_save(sender, instance, *args, **kwargs):
+    if 'created' in kwargs and kwargs['created']:
+        instance.last_refresh = instance.last_refresh or datetime.datetime.utcnow().replace(tzinfo=utc)
+        if instance.refresh_every:
+            instance.next_refresh = instance.last_refresh + instance.refresh_every
+
 
 def dataresource_post_save(sender, instance, *args, **kwargs):
-    if 'created' in kwargs and kwargs['created']:
-        instance.spatial_metadata = SpatialMetadata.objects.create()
-        instance.driver_instance.compute_fields()
-    else:
-        try:
-            instance.spatial_metadata
-        except:
+    print "calling post-save signal for data resource"
+    if instance.status == CONTENT_STATUS_PUBLISHED:
+        if not instance.spatial_metadata:
+            instance.spatial_metadata = SpatialMetadata.objects.create()
             instance.driver_instance.compute_fields()
+            instance.save()
 
+pre_save.connect(dataresource_pre_save, sender=DataResource, weak=False)
 post_save.connect(dataresource_post_save, sender=DataResource, weak=False)
 
 

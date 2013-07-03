@@ -68,8 +68,6 @@ $ ->
   BrewerPaletteCollection = Backbone.Collection.extend
     model: BrewerPalette
 
-
-
   Field = Backbone.Model.extend
     defaults:
       min: 'N/A'
