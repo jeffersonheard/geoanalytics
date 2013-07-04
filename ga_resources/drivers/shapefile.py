@@ -62,9 +62,11 @@ class ShapefileDriver(Driver):
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.dbf')))
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.prj')))
         sh.unzip("-o", self.cached_basename + self.src_ext, '-d', self.cache_path)
-        sh.mv(sh.glob(os.path.join(self.cache_path, '*.shp')), self.cached_basename + '.shp')
-        sh.mv(sh.glob(os.path.join(self.cache_path, '*.shx')), self.cached_basename + '.shx')
-        sh.mv(sh.glob(os.path.join(self.cache_path, '*.dbf')), self.cached_basename + '.dbf')
+        
+        if not os.path.exists(self.cached_basename + ".shp"):
+           sh.mv(sh.glob(os.path.join(self.cache_path, '*.shp')), self.cached_basename + '.shp')
+           sh.mv(sh.glob(os.path.join(self.cache_path, '*.shx')), self.cached_basename + '.shx')
+           sh.mv(sh.glob(os.path.join(self.cache_path, '*.dbf')), self.cached_basename + '.dbf')
 
         try:
             sh.mv(sh.glob(os.path.join(self.cache_path, '*.prj')), self.cached_basename + '.prj')

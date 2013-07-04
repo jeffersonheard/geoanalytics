@@ -154,7 +154,6 @@ def dataresource_pre_save(sender, instance, *args, **kwargs):
 
 
 def dataresource_post_save(sender, instance, *args, **kwargs):
-    print "calling post-save signal for data resource"
     if instance.status == CONTENT_STATUS_PUBLISHED:
         if not instance.spatial_metadata:
             instance.spatial_metadata = SpatialMetadata.objects.create()
