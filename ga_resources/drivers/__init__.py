@@ -59,7 +59,15 @@ class Driver(object):
         else:
             return False
 
+    def supports_download(self):
+        return True
 
+    def filestream(self):
+        self.ensure_local_file()
+        return open(self.cached_basename + self.src_ext)
+
+    def mimetype(self):
+        return "application/octet-stream"
 
     def ready_data_resource(self, **kwargs):
         """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
