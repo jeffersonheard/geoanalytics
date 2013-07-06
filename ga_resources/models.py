@@ -21,6 +21,9 @@ _log = getLogger('ga_resources')
 class CatalogPage(Page):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
 
+    class Meta:
+        ordering = ['title']
+
     @property
     def siblings(self):
         if self.parent:
@@ -101,6 +104,9 @@ class DataResource(Page, RichText):
     cache_ttl = models.PositiveIntegerField(default=10, blank=True, null=True)  # if we perform caching, then this is how long in seconds
     data_cache = models.FilePathField(null=True, blank=True)
     driver = models.CharField(default='ga_resources.drivers.shapefile', max_length=255, null=False, blank=False)
+
+    class Meta:
+        ordering = ['title']
 
     @property
     def srs(self):
