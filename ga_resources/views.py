@@ -34,10 +34,11 @@ def delete_page(request):
     return HttpResponseRedirect(to.get_absolute_url())
 
 def download_file(request, *args, **kwargs):
-    drv = get_object_or_404(DataResource, slug=kwargs['slug'])
+    slug, ext = kwargs['slug'].split('.')
+    drv = get_object_or_404(DataResource, slug=slug)
     if drv.driver_instance.supports_download():
         rsp = HttpResponse(drv.driver_instance.filestream(), mimetype=drv.driver_instance.mimetype())
-        rsp['Content-Disposition'] = 'attachment; filename="{filename}"'.format(filename=drv.slug.split('/')[-1] + drv.driver_instance.src_ext)
+        rsp['Content-Disposition'] = 'attachment; filename="{filename}"'.format(filename=drv.slug.split('/')[-1] + '.' + ext)
         return rsp
     else:
         return HttpResponseNotFound()

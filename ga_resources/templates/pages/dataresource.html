@@ -22,7 +22,7 @@
     {% if page.dataresource.resource_file %}
         <h5><a href="{{ page.dataresource.resource_file.url }}">Download the original resource file.</a></h5>
     {% elif page.dataresource.resource_url %}
-        <h5><a href="/ga_resources/download/{{ page.slug }}/">Download the original resource file.</a></h5>
+        <h5><a href="/ga_resources/download/{{ page.slug }}.zip">Download the original resource file.</a></h5>
     {% endif %}
 
     <h5><a href="/ga_resources/wfs/?service=wfs&request=GetFeature&version=2.0.0&typeNames={{ page.slug }}">Web Feature Service</a>
