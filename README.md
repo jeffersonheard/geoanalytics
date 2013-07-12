@@ -1,7 +1,7 @@
 # Geoanalytics 
 
 #### _Content, Collaboration, and Analytics for Geography._
-[More documentation is in the wiki](https://github.com/JeffHeard/geoanalytics/wiki)
+[See user, administrator, and developer documentation in the wiki](https://github.com/JeffHeard/geoanalytics/wiki)
 
 ## About Geoanalytics
 
