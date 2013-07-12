@@ -1,6 +1,7 @@
 # Geoanalytics 
 
-Content, Collaboration, and Analytics for Geography.
+#### _Content, Collaboration, and Analytics for Geography._
+[More documentation is in the wiki](https://github.com/JeffHeard/geoanalytics/wiki)
 
 ## About Geoanalytics
 
@@ -26,7 +27,6 @@ scientific geographic data.  It has been used in 11 projects at RENCI in:
 * Digital humanities
 * Digital media
 
-[More documentation is in the wiki](https://github.com/JeffHeard/geoanalytics/wiki)
 
 ## Contribute!
 
