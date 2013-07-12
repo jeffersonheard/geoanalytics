@@ -26,6 +26,8 @@ scientific geographic data.  It has been used in 11 projects at RENCI in:
 * Digital humanities
 * Digital media
 
+[More documentation is in the wiki](https://github.com/JeffHeard/geoanalytics/wiki)
+
 ## Contribute!
 
 We are actively seeking collaborators and contributors that can help grow the 
