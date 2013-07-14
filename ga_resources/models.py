@@ -21,6 +21,9 @@ _log = getLogger('ga_resources')
 class CatalogPage(Page):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
 
+    class Meta:
+        ordering = ['title']
+
     @property
     def siblings(self):
         if self.parent:
@@ -102,6 +105,9 @@ class DataResource(Page, RichText):
     data_cache = models.FilePathField(null=True, blank=True)
     driver = models.CharField(default='ga_resources.drivers.shapefile', max_length=255, null=False, blank=False)
 
+    class Meta:
+        ordering = ['title']
+
     @property
     def srs(self):
         srs = osr.SpatialReference()
@@ -154,7 +160,6 @@ def dataresource_pre_save(sender, instance, *args, **kwargs):
 
 
 def dataresource_post_save(sender, instance, *args, **kwargs):
-    print "calling post-save signal for data resource"
     if instance.status == CONTENT_STATUS_PUBLISHED:
         if not instance.spatial_metadata:
             instance.spatial_metadata = SpatialMetadata.objects.create()

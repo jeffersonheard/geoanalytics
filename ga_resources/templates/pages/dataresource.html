@@ -22,23 +22,21 @@
     {% if page.dataresource.resource_file %}
         <h5><a href="{{ page.dataresource.resource_file.url }}">Download the original resource file.</a></h5>
     {% elif page.dataresource.resource_url %}
-        <h5><a href="{{ page.dataresource.resource_url }}">Download the original resource file.</a></h5>
+        <h5><a href="/ga_resources/download/{{ page.slug }}.zip">Download the original resource file.</a></h5>
     {% endif %}
 
-    <h5><a href="/ga_resources/wfs/?service=wfs&request=GetFeature&version=2.0.0&typeNames={{ page.slug }}">OGC Web Feature Service (Suitable to import into QGIS or ArcGIS)</a>
-    </h5>
+    <h5><a href="/ga_resources/wfs/?service=wfs&request=GetFeature&version=2.0.0&typeNames={{ page.slug }}">Web Feature Service</a>
+    <span class='helptext'> - OGC WFS Web Feature Service 2.0.0. Suitable to import into QGIS or ArcGIS.</span></h5> 
 
     {% if page.dataresource.renderedlayer_set.exists %}
-        <dl>
-            <dt>WMS</dt>
-            <dd>
-                <ul>
-                    {% for service in page.dataresource.renderedlayer_set.all %}
-                        <li><a href="{{ service.get_absolute_url }}">{{ service.title }}</a></li>
-                    {% endfor %}
-                </ul>
-            </dd>
-        </dl>
+    <h5>Web Mapping Services</h5>
+    <p class='helptext'>OGC WMS Web Mapping Service 1.1.0. Styled layers suitable for display and thematic mapping in TerraHub or with Google. Click any link for a 
+    preview of what a configured web map will look like.</p>
+	<ul>
+	    {% for service in page.dataresource.renderedlayer_set.all %}
+		<li><a href="{{ service.get_absolute_url }}">{{ service.title }}</a></li>
+	    {% endfor %}
+	</ul>
     {% else %}
         <p><i>No styled layer services associated with this resource</i></p>
     {% endif %}
@@ -46,6 +44,8 @@
         layer</a>
 
     <h3>Data Summary</h3>
+    <p class='helptext'>What follows is a summary of the values in the "columns" of the data source.  In geographic data sources (GIS data), every line, 
+    point, or polygon shape has a row in a database associated with it.  This is a summary of the values in those rows.</p>
     {%  comment %}
     <dl>
         {% for field in page.dataresource.driver_instance.get_data_fields %}
@@ -144,6 +144,12 @@
         }
         .extra-metadata {
             font-style: italic;
+        }
+	.helptext {
+	    font-style: italic;
+            font-size: 10pt;
+	    font-weight: normal; 
+            color: #35c;
         }
     </style>
 
