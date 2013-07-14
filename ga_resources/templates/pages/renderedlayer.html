@@ -11,6 +11,8 @@
         {{ page.renderedlayer.content|richtext_filter|safe }}
     {% endeditable %}
 
+    <h4><a href="/ga_resources/{{page.renderedlayer.dataresource.slug}}">Link to the data resource.</a></h4>
+
 
     <h4>Available Styles</h4>
     {% editable page.renderedlayer.default_style %}
