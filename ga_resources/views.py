@@ -2,8 +2,9 @@ from ga_ows.views import wfs, wms
 from ga_resources import models, drivers, predicates
 from django.views.generic import TemplateView, View
 import json
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from ga_resources.drivers import shapefile
+from ga_resources.models import DataResource
 import numpy as np
 from osgeo import osr, ogr
 import importlib
@@ -31,6 +32,16 @@ def delete_page(request):
     to = p.parent if p.parent else '/'
     p.delete()
     return HttpResponseRedirect(to.get_absolute_url())
+
+def download_file(request, *args, **kwargs):
+    slug, ext = kwargs['slug'].split('.')
+    drv = get_object_or_404(DataResource, slug=slug)
+    if drv.driver_instance.supports_download():
+        rsp = HttpResponse(drv.driver_instance.filestream(), mimetype=drv.driver_instance.mimetype())
+        rsp['Content-Disposition'] = 'attachment; filename="{filename}"'.format(filename=drv.slug.split('/')[-1] + '.' + ext)
+        return rsp
+    else:
+        return HttpResponseNotFound()
 
 class StylerView(TemplateView):
     template_name = 'ga_resources/styler.html'

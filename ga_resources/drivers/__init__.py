@@ -59,7 +59,15 @@ class Driver(object):
         else:
             return False
 
+    def supports_download(self):
+        return True
 
+    def filestream(self):
+        self.ensure_local_file()
+        return open(self.cached_basename + self.src_ext)
+
+    def mimetype(self):
+        return "application/octet-stream"
 
     def ready_data_resource(self, **kwargs):
         """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
@@ -161,19 +169,23 @@ class Driver(object):
 #    sh.cascadenik(name + '.mml', name + '.xml')
 
 
-def compile_layer(layer_id, srs, **parameters):
+def compile_layer(layer_id, srs, css_classes, **parameters):
     return {
         "id" : re.sub('/', '_', layer_id),
         "name" : re.sub('/', '_', layer_id),
+        "class" : ' '.join(css_classes).strip(),
         "srs" : srs,
         "Datasource" : parameters
     }
 
-def compile_mml(srs, stylesheets, *layers):
+def compile_mml(srs, styles, *layers):
+    stylesheets = [m.Style.objects.get(slug=s.split('.')[0]) for s in styles]
+    css_classes = set([s.split('.')[1] if '.' in s else 'default' for s in styles])
+
     mml = {
         'srs' : srs,
         'Stylesheet' : [{ "id" : re.sub('/', '_', stylesheet.slug), "data" : stylesheet.stylesheet} for stylesheet in stylesheets],
-        'Layer' : [compile_layer(layer_id, lsrs, **parms) for layer_id, lsrs, parms in layers]
+        'Layer' : [compile_layer(layer_id, lsrs, css_classes, **parms) for layer_id, lsrs, parms in layers]
     }
     return mml
 
@@ -209,11 +221,11 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
         _, layer_spec = driver.ready_data_resource(**kwargs)
         layer_specs.append(layer_spec)
 
-    stylesheet_objects = [m.Style.objects.get(slug=style) for style in styles]
+    #stylesheet_objects = [m.Style.objects.get(slug=style) for style in (name.split('.')[0] for name in styles)]
     if not os.path.exists(cached_filename + ".xml"):  # not an else as previous clause may remove file.
-        stylesheets = [style for style in stylesheet_objects]
+        #stylesheets = [style for style in stylesheet_objects]
         try:
-            compile_mapfile(cached_filename, srs, stylesheets, *layer_specs)
+            compile_mapfile(cached_filename, srs, styles, *layer_specs)
         except sh.ErrorReturnCode_1, e:
             raise RuntimeError(str(e.stderr))
 
