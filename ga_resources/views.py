@@ -291,15 +291,15 @@ class WMSAdapter(wms.WMSAdapterBase):
         for layer in layers:
             desc = {}
             ret.append(desc)
-            desc['"name"'] = layer.slug
+            desc["name"] = layer.slug
             desc['title'] = layer.title
             desc['srs'] = layer.data_resource.spatial_metadata.native_srs
             desc['queryable'] = True
-            desc['minx'], desc['miny'], desc['maxx'], desc['maxy'] = layer.data_resource.native_bounding_box.extent  # FIXME this is not native
-            desc['ll_minx'], desc['ll_miny'], desc['ll_maxx'], desc['ll_maxy'] = layer.data_resource.bounding_box.extent
+            desc['minx'], desc['miny'], desc['maxx'], desc['maxy'] = layer.data_resource.spatial_metadata.native_bounding_box.extent  # FIXME this is not native
+            desc['ll_minx'], desc['ll_miny'], desc['ll_maxx'], desc['ll_maxy'] = layer.data_resource.spatial_metadata.bounding_box.extent
             desc['styles'] = []
             desc['styles'].append({
-                '"name"' : layer.default_style.slug,
+                "name" : layer.default_style.slug,
                 'title' : layer.default_style.title,
                 'legend_width' : layer.default_style.legend_width,
                 'legend_height' : layer.default_style.legend_height,
@@ -307,7 +307,7 @@ class WMSAdapter(wms.WMSAdapterBase):
             })
             for style in layer.styles.all():
                 desc['styles'].append({
-                    '"name"' : style.slug,
+                    "name" : style.slug,
                     'title' : style.title,
                     'legend_width' : style.legend_width,
                     'legend_height' : style.legend_height,

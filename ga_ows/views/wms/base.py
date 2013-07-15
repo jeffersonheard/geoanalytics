@@ -470,7 +470,8 @@ class GetMapMixin(common.OWSMixinBase):
                     del tmp
                     raise common.NoApplicableCode(str(ex))
 
-        return HttpResponse(ret, mimetype=fmt)
+        resp = HttpResponse(ret, mimetype=fmt if '/' in fmt else 'image/'+fmt)
+        return resp
 
 
 class GetFeatureInfoMixin(common.OWSMixinBase):

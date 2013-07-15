@@ -27,8 +27,8 @@
             <Country>{{contact_country}}</Country>
          </ContactAddress>
          <ContactElectronicMailAddress>{{ contact_email }}</ContactElectronicMailAddress>
-      </ContactInformation>
       {% endif %}
+      </ContactInformation>
       <Fees>{{ fees }}</Fees>
       <AccessConstraints>{{ contraints }}</AccessConstraints>
    </Service>
