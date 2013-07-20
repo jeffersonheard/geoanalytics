@@ -1,4 +1,3 @@
-from django.core.serializers import json
 from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText, CONTENT_STATUS_DRAFT, CONTENT_STATUS_PUBLISHED
 from mezzanine.core.managers import SearchableManager
@@ -12,7 +11,6 @@ import os
 from osgeo import osr
 import datetime
 from django.utils.timezone import utc
-from hashlib import md5
 from logging import getLogger
 
 _log = getLogger('ga_resources')
@@ -78,15 +76,6 @@ class SpatialMetadata(models.Model):
 
 class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
-    UPLOADED = 1
-    URL = 2
-    CONFIG = 3
-
-    method = models.PositiveSmallIntegerField(default=UPLOADED, choices=(
-        (UPLOADED, 'uploaded'),
-        (URL, 'url'),
-        (CONFIG, 'configured')
-    ))
     resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
     resource_url = models.URLField(null=True, blank=True)
     resource_config = models.TextField(null=True, blank=True)
@@ -95,14 +84,9 @@ class DataResource(Page, RichText):
     next_refresh = models.DateTimeField(null=True, blank=True, db_index=True) # will be populated every time the update manager runs
     refresh_every = TimedeltaField(null=True, blank=True)
     md5sum = models.CharField(max_length=64, blank=True, null=True) # the unique md5 sum of the data
-
     metadata_url = models.URLField(null=True, blank=True)
     metadata_xml = models.TextField(null=True, blank=True)
     spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
-
-    perform_caching = models.BooleanField(default=True)  # if this is true, then data will be cached
-    cache_ttl = models.PositiveIntegerField(default=10, blank=True, null=True)  # if we perform caching, then this is how long in seconds
-    data_cache = models.FilePathField(null=True, blank=True)
     driver = models.CharField(default='ga_resources.drivers.shapefile', max_length=255, null=False, blank=False)
 
     class Meta:
@@ -132,7 +116,6 @@ class DataResource(Page, RichText):
                 sh.rm('-rf', sh.glob(filename + "*"))
             sh.rm('-rf', self.cache_path)
             s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
-
 
 
     def refresh(self):
@@ -182,14 +165,35 @@ class ResourceGroup(Page):
     min_time = models.DateTimeField(null=True)
     max_time = models.DateTimeField(null=True)
 
-class AncillaryResource(Page):
+class RelatedResource(Page, RichText):
     """Represents a file that can be joined onto a vector resource"""
+    UPPERCASE = 0
+    CAPITALIZE = 1
+    LOWERCASE = 2
+
     resource_file = models.FileField(upload_to='ga_resources')
-    sqlite_cache = models.FilePathField(null=True)
-    foreign_key_resource = models.ForeignKey(DataResource)
+    foreign_resource = models.ForeignKey(DataResource)
     foreign_key = models.CharField(max_length=64)
     local_key = models.CharField(max_length=64)
+    driver = models.CharField(max_length=255,default='ga_resources.drivers.related.excel')
+    key_transform = models.IntegerField(blank=True, null=True, choices=(
+        (CAPITALIZE, "Capitalize"),
+        (LOWERCASE, "Lower-case"),
+        (UPPERCASE, "Upper-case")
+    ))
 
+    @property
+    def driver_instance(self):
+        if not hasattr(self, '_driver_instance'):
+            self._driver_instance = importlib.import_module(self.driver).driver(self)
+        return self._driver_instance
+
+    @property
+    def cache_path(self):
+        p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
+        if not os.path.exists(p):
+            os.makedirs(p)  # just in case it's not there yet.
+        return p
 
 class Style(Page):
     """A stylesheet in Cascadenik format.  We are switching to Carto shortly."""
@@ -214,6 +218,8 @@ class RenderedLayer(Page, RichText):
     default_style = models.ForeignKey(Style, related_name='default_for_layer')
     styles = models.ManyToManyField(Style)
     cache_seconds = models.PositiveIntegerField(default=60)
+
+
 
 
 def purge_cache_on_save(sender, instance, created, *args, **kwargs):
