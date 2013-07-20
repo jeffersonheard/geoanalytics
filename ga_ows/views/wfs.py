@@ -466,6 +466,10 @@ class GetFeatureMixin(WFSBase):
     def GetFeature(self, request, kwargs):
         """
         """
+        mimetypes = {
+            'GeoJSON' : 'application/json'
+        }
+
         if 'xml' in kwargs:
             parms = self._parse_xml_GetFeature(kwargs['xml'])
         else:
@@ -542,7 +546,7 @@ class GetFeatureMixin(WFSBase):
             rdata = responsef.read()
             responsef.close()
             os.unlink(tmpname)
-            return HttpResponse(rdata, mimetype=output_format)
+            return HttpResponse(rdata, mimetype=mimetypes.get(output_format,'text/plain'))
         else:
             raise OperationProcessingFailed.at('GetFeature', 'outputFormat {of} not supported ({formats})'.format(of=output_format, formats=drivers.keys()))
 

@@ -14,10 +14,10 @@ import requests
 import re
 from django.conf import settings
 from ga_resources import predicates
+from PIL import Image
 
 VECTOR = False
 RASTER = True
-
 
 class Driver(object):
     """Abstract class that defines a number of reusable methods to load geographic data and create services from it"""
@@ -37,7 +37,7 @@ class Driver(object):
         cached_filename = self.cached_basename + ext
         self.src_ext = ext
 
-        ready = self.resource.perform_caching and os.path.exists(cached_filename) and not freshen
+        ready = os.path.exists(cached_filename) and not freshen
 
         if not ready:
             if self.resource.resource_file:
@@ -59,8 +59,37 @@ class Driver(object):
         else:
             return False
 
-    def supports_download(self):
+    @classmethod
+    def supports_mutiple_layers(cls):
         return True
+
+    @classmethod
+    def supports_download(cls):
+        return True
+
+    @classmethod
+    def supports_related(cls):
+        return True
+
+    @classmethod
+    def supports_upload(cls):
+        return True
+
+    @classmethod
+    def supports_configuration(cls):
+        return True
+
+    @classmethod
+    def supports_point_query(cls):
+        return True
+
+    @classmethod
+    def supports_save(cls):
+        return True
+
+    @classmethod
+    def datatype(cls):
+        return VECTOR
 
     def filestream(self):
         self.ensure_local_file()
@@ -70,8 +99,15 @@ class Driver(object):
         return "application/octet-stream"
 
     def ready_data_resource(self, **kwargs):
-        """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
-        raise NotImplementedError("Method ready_data_resource not implemented in abstract class")
+        """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
+        ignores them"""
+
+        changed = self.resource.spatial_metadata and self.ensure_local_file(
+            freshen='fresh' in kwargs and kwargs['fresh'])
+        if changed:
+            self.compute_fields(**kwargs)
+
+        return self.resource.slug, self.resource.spatial_metadata.srs
 
     def compute_fields(self, **kwargs):
         self.ensure_local_file()
@@ -103,7 +139,21 @@ class Driver(object):
         return os.path.join(self.cache_path, filename + '.' + xtn)
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
-        raise NotImplementedError("Method get_data_for_point is not implemented in abstract class")
+        _, nativesrs, result = self.ready_data_resource(**kwargs)
+
+        s_srs = osr.SpatialReference()
+        t_srs = osr.SpatialReference()
+
+        if srs.lower().startswith('epsg'):
+            s_srs.ImportFromEPSG(int(srs.split(':')[-1]))
+        else:
+            s_srs.ImportFromProj4(srs.encode('ascii'))
+
+        t_srs.ImportFromProj4(nativesrs.encode('ascii'))
+        crx = osr.CoordinateTransformation(s_srs, t_srs)
+        x1, y1, _ = crx.TransformPoint(wherex, wherey)
+
+        return result, x1, y1
 
     def as_dataframe(self, **kwargs):
         raise NotImplementedError("This driver does not support dataframes")
@@ -218,12 +268,10 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
     for layer in layers:
         rendered_layer = m.RenderedLayer.objects.get(slug=layer)
         driver = rendered_layer.data_resource.driver_instance
-        _, layer_spec = driver.ready_data_resource(**kwargs)
+        layer_spec = driver.ready_data_resource(**kwargs)
         layer_specs.append(layer_spec)
 
-    #stylesheet_objects = [m.Style.objects.get(slug=style) for style in (name.split('.')[0] for name in styles)]
     if not os.path.exists(cached_filename + ".xml"):  # not an else as previous clause may remove file.
-        #stylesheets = [style for style in stylesheet_objects]
         try:
             compile_mapfile(cached_filename, srs, styles, *layer_specs)
         except sh.ErrorReturnCode_1, e:
@@ -260,4 +308,3 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
         mapnik.render_to_file(m, filename, fmt)
 
     return filename
-

@@ -1,14 +1,20 @@
 from django.contrib.gis.geos import Polygon
 import os
 from osgeo import osr, gdal
-from . import Driver, VECTOR
+from . import Driver, VECTOR, RASTER
 import time
 from pandas import DataFrame, Panel
 from django.template.defaultfilters import slugify
 import re
 
 class GeotiffDriver(Driver):
-    DATA_TYPE = VECTOR
+    @classmethod
+    def datatype(cls):
+        return RASTER
+
+    @classmethod
+    def supports_related(cls):
+        return False
 
     def ready_data_resource(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver

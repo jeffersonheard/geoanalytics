@@ -261,7 +261,7 @@ INSTALLED_APPS = (
     "mezzanine.mobile",
     
     "tastypie",
-    "ga_home",
+    "ga_applications",
     "ga_ows",
     "ga_resources",
     "ga_irods",
