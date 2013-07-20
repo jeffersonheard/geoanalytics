@@ -1,6 +1,7 @@
 # from ga_ows.views import wms, wfs
 from django.conf import settings as s
 from django.contrib.gis.geos import Polygon, GEOSGeometry
+from ga_resources.api import SpatialMetadata
 import os
 from osgeo.ogr import Geometry
 import sh
@@ -12,8 +13,7 @@ import shutil
 from django.template.defaultfilters import slugify
 import re
 import json
-
-DATA_TYPE = VECTOR
+from zipfile import ZipFile
 
 def ogrfield(elt):
     return re.sub('-', '_', slugify(elt).encode('ascii'))[0:10]
@@ -22,13 +22,21 @@ def identity(x):
     return '"' + x + '"' if isinstance(x, basestring) else str(x)
 
 
-geom_table = {
-    'Point' : ogr.wkbPoint,
-    'Polygon' : ogr.wkbPolygon,
-    'LineString' : ogr.wkbLineString,
-    'MultiLineString' : ogr.wkbMultiLineString,
-    'MultiPolygon' : ogr.wkbMultiPolygon,
-    'MultiPoint' : ogr.wkbMultiPoint
+dtypes = {
+    'int64': ogr.OFTInteger,
+    'float64': ogr.OFTReal,
+    'object': ogr.OFTString,
+    'datetime64[ns]': ogr.OFTDateTime
+}
+geomTypes = {
+    'GeometryCollection': ogr.wkbGeometryCollection,
+    'LinearRing': ogr.wkbLinearRing,
+    'LineString': ogr.wkbLineString,
+    'MultiLineString': ogr.wkbMultiLineString,
+    'MultiPoint': ogr.wkbMultiPoint,
+    'MultiPolygon': ogr.wkbMultiPolygon,
+    'Point': ogr.wkbPoint,
+    'Polygon': ogr.wkbPolygon
 }
 
 def transform(geom, crx):
@@ -38,39 +46,51 @@ def transform(geom, crx):
 
 
 class ShapefileDriver(Driver):
-    DATA_TYPE = VECTOR
+    @classmethod
+    def supports_multiple_layers(cls):
+        return False
+
+    @classmethod
+    def supports_configuration(cls):
+        return False
 
     def ready_data_resource(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        changed = self.ensure_local_file(freshen='fresh' in kwargs and kwargs['fresh'])
+        slug, srs = super(ShapefileDriver, self).ready_data_resource(**kwargs)
+        return slug, srs, {
+            'type': 'shape',
+            "file": self.cached_basename + '.shp'
+        }
 
-        if changed:
-            self.compute_fields(**kwargs)
-
-        return self.cache_path, (self.resource.slug, self.resource.spatial_metadata.native_srs, {'type': 'shape', "file": self.cached_basename + '.shp'})
+    def clear_cached_files(self):
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shp')))
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shx')))
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.dbf')))
+        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.prj')))
 
     def compute_fields(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
         super(ShapefileDriver, self).compute_fields(**kwargs)
+        self.clear_cached_files()
 
-        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shp')))
-        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.shx')))
-        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.dbf')))
-        sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.prj')))
-        sh.unzip("-o", self.cached_basename + self.src_ext, '-d', self.cache_path)
-        
-        if not os.path.exists(self.cached_basename + ".shp"):
-           sh.mv(sh.glob(os.path.join(self.cache_path, '*.shp')), self.cached_basename + '.shp')
-           sh.mv(sh.glob(os.path.join(self.cache_path, '*.shx')), self.cached_basename + '.shx')
-           sh.mv(sh.glob(os.path.join(self.cache_path, '*.dbf')), self.cached_basename + '.dbf')
+        archive = ZipFile(self.cached_basename + self.src_ext)
+        projection_found = False
+        for name in archive.namelist():
+            xtn = name.split('.')[-1].lower()
+            if xtn in {'shp', 'shx', 'dbf', 'prj'}:
+                projection_found = projection_found or xtn == 'prj'
+                with open(self.cached_basename + '.' + xtn, 'wb') as fout:
+                    with archive.open(name) as fin:
+                        chunk = fin.read(65536)
+                        while chunk:
+                            fout.write(chunk)
+                            chunk = fin.read(65536)
 
-        try:
-            sh.mv(sh.glob(os.path.join(self.cache_path, '*.prj')), self.cached_basename + '.prj')
-        except:
+        if not projection_found:
             with open(self.cached_basename + '.prj', 'w') as f:
                 srs = osr.SpatialReference()
                 srs.ImportFromEPSG(4326)
@@ -80,6 +100,10 @@ class ShapefileDriver(Driver):
         lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
         xmin, xmax, ymin, ymax = lyr.GetExtent()
         crs = lyr.GetSpatialRef()
+
+        if not self.resource.spatial_metadata:
+            self.resource.spatial_metadata = SpatialMetadata()
+
         self.resource.spatial_metadata.native_srs = crs.ExportToProj4()
         e4326 = osr.SpatialReference()
         e4326.ImportFromEPSG(4326)
@@ -93,27 +117,15 @@ class ShapefileDriver(Driver):
         self.resource.save()
 
     def get_data_fields(self, **kwargs):
-        _, (_, _, result) = self.ready_data_resource(**kwargs)
+        _, _, result = self.ready_data_resource(**kwargs)
         ds = ogr.Open(result['file'])
-        lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
+        lyr = ds.GetLayerByIndex(0) if 'layer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
         return [(field.name, field.GetTypeName(), field.width) for field in lyr.schema]
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
-        _, (_, nativesrs, result) = self.ready_data_resource(**kwargs)
+        result, x1, y1 = super(ShapefileDriver, self).get_data_for_point(wherex, wherey, srs, fuzziness, **kwargs)
         ds = ogr.Open(result['file'])
         lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
-
-        s_srs = osr.SpatialReference()
-        t_srs = osr.SpatialReference()
-
-        if srs.lower().startswith('epsg'):
-            s_srs.ImportFromEPSG(int(srs.split(':')[-1]))
-        else:
-            s_srs.ImportFromProj4(srs.encode('ascii'))
-
-        t_srs.ImportFromProj4(nativesrs.encode('ascii'))
-        crx = osr.CoordinateTransformation(s_srs, t_srs)
-        x1, y1, _ = crx.TransformPoint(wherex, wherey)
 
         if fuzziness==0:
             lyr.SetSpatialFilter(ogr.CreateGeometryFromWkt("POINT({x1} {y1})".format(**locals())))
@@ -197,7 +209,7 @@ class ShapefileDriver(Driver):
 
                 lyr.SetSpatialFilterRect(minx, miny, maxx, maxy)
             elif 'boundary' in kwargs:
-                boundary = ogr.Geometry(geom_table[kwargs['boundary_type']], kwargs["boundary"])
+                boundary = ogr.Geometry(geomTypes[kwargs['boundary_type']], kwargs["boundary"])
                 lyr.SetSpatialFilter(boundary)
 
 
@@ -213,7 +225,6 @@ class ShapefileDriver(Driver):
 
             start = kwargs['start'] if 'start' in kwargs else 0
             count = kwargs['count'] if 'count' in kwargs else len(lyr) - start
-
 
             records = []
             for i in range(start):
@@ -233,6 +244,7 @@ class ShapefileDriver(Driver):
                 df = df.sort_index(by=kwargs['sort_by'])
 
             return df
+
         elif hasattr(self, '_df'):
             return self._df
 
@@ -253,23 +265,6 @@ class ShapefileDriver(Driver):
     @classmethod
     def from_dataframe(cls, df, shp, srs):
         """Write an dataframe object out as a shapefile"""
-
-        dtypes = {
-            'int64' : ogr.OFTInteger,
-            'float64' : ogr.OFTReal,
-            'object' : ogr.OFTString,
-            'datetime64[ns]' : ogr.OFTDateTime
-        }
-        geomTypes = {
-            'GeometryCollection' : ogr.wkbGeometryCollection,
-            'LinearRing' : ogr.wkbLinearRing,
-            'LineString' : ogr.wkbLineString,
-            'MultiLineString' : ogr.wkbMultiLineString,
-            'MultiPoint' : ogr.wkbMultiPoint,
-            'MultiPolygon' : ogr.wkbMultiPolygon,
-            'Point' : ogr.wkbPoint,
-            'Polygon' : ogr.wkbPolygon
-        }
 
         drv = ogr.GetDriverByName('ESRI Shapefile')
 
@@ -301,7 +296,6 @@ class ShapefileDriver(Driver):
             feature.SetGeometry(ogr.CreateGeometryFromWkb(record['geometry'].wkb))
             l.CreateFeature(feature)
 
-        ds.SyncToDisk()
         del ds
 
 driver = ShapefileDriver

@@ -37,7 +37,7 @@ admin.site.register(DataResource, PageAdmin)
 admin.site.register(ResourceGroup, PageAdmin)
 admin.site.register(OrderedResource)
 
-admin.site.register(AncillaryResource, PageAdmin)
+admin.site.register(RelatedResource, PageAdmin)
 
 admin.site.register(RenderedLayer, RenderedLayerAdmin)
 admin.site.register(Style, PageAdmin)
