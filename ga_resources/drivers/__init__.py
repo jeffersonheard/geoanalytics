@@ -1,6 +1,5 @@
 import json
 from django.utils.timezone import utc
-from lxml import etree
 import mapnik
 from collections import OrderedDict
 from hashlib import md5
@@ -14,7 +13,8 @@ import requests
 import re
 from django.conf import settings
 from ga_resources import predicates
-from PIL import Image
+
+from osgeo import osr
 
 VECTOR = False
 RASTER = True

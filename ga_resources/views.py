@@ -1,16 +1,15 @@
+from django.contrib.gis.geos import Polygon, GEOSGeometry
 from ga_ows.views import wfs, wms
-from ga_resources import models, drivers, predicates
-from django.views.generic import TemplateView, View
+from ga_resources import models, drivers
 import json
 from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from ga_resources.drivers import shapefile
 from ga_resources.models import DataResource
-import numpy as np
 from osgeo import osr, ogr
 import importlib
 from mezzanine.pages.models import Page
 from mezzanine.utils.urls import admin_url
-from django.shortcuts import get_object_or_404, get_list_or_404
+from django.shortcuts import get_object_or_404
 from hashlib import md5
 
 def create_page(request):
@@ -43,184 +42,43 @@ def download_file(request, *args, **kwargs):
     else:
         return HttpResponseNotFound()
 
-class StylerView(TemplateView):
-    template_name = 'ga_resources/styler.html'
+def search_catalog(request, *args, **kwargs):
+    """A spatial search for the DataResource catalog. In the future, this will be more thorough, but right now it looks
+    for a filter parameter in the request, and inside that a JSON payload including a bbox four-tuple of minx, maxx
+     miny, maxy OR a geometry wkt and an optional srid.  It then performs a broad overlap search and returns the results
+     as a JSON or JSONP list of::
 
-    def get_context_data(self, **kwargs):
-        ctx = super(StylerView, self).get_context_data(**kwargs)
-        ctx['installed_fonts'] = ['DejaVu Sans Book']
+        [{ "title" : "title",
+           "path" : ["breadcrumps", "to", "resource"],
+           "url" : "http://mydomain/ga_resources/path/to/resource/title"
+        }]
+    """
+    flt = json.loads(request.REQUEST['filter'])
+    if 'bbox' in flt:
+        minx, miny, maxx, maxy = flt['bbox']
+        geometry = Polygon.from_bbox((minx, miny, maxx, maxy))
+    else:
+        geometry = GEOSGeometry(flt['boundary'])
 
-        resource_slug = self.request.GET['resource']
-        resource = models.DataResource.objects.get(slug=resource_slug)
+    if 'srid' in flt:
+        geometry.set_srid(flt['srid'])
 
-        drv = resource.driver_instance
-        df = drv.as_dataframe()
-        keys = [k for k in df.keys() if k != 'geometry']
-        type_table = {
-            'float64' : 'number',
-            'int64' : 'number',
-            'object' : 'text'
-        }
-        ctx['resource'] = resource
-        ctx['new_service'] = 'new' in self.request.GET and self.request.GET['new']
+    results = models.SpatialMetadata.objects.filter(geometry__overlaps=geometry)
+    ret = [{ 'title' : r.title, 'path' : r.slug.split('/')[:-1], 'url' : r.get_abolute_url() } for r in results]
 
-        ctx['attrs'] = [{ 'name' : k } for k in keys]
-        for i, k in enumerate(keys):
-            s = df[k]
-            ctx['attrs'][i]['kind'] = type_table[s.dtype.name]
-            ctx['attrs'][i]['tags'] = [tag for tag in [
-                'unique' if predicates.unique(s) else None,
-                'not null' if predicates.not_null(s) else None,
-                'null' if predicates.some_null(s) else None,
-                'empty' if predicates.all_null(s) else None,
-                'categorical' if predicates.categorical(s) else None,
-                'open ended' if predicates.continuous(s) else None,
-                'mostly null' if predicates.mostly_null(s) else None,
-                'uniform' if predicates.uniform(s) else None
-            ] if tag]
-            if 'categorical' in ctx['attrs'][i]['tags']:
-                ctx['attrs'][i]['uniques'] = [x for x in s.unique()]
-            for k, v in s.describe().to_dict().items():
-                ctx['attrs'][i][k] = v
-        ctx['attrs'] = json.dumps(ctx['attrs'], indent=2)
+    callback = None
+    if 'jsonCallback' in request.REQUEST:
+        callback = request.REQUEST['jsonCallback']
+    elif 'callback' in request.REQUEST:
+        callback = request.REQUEST['callback']
 
-        return ctx
+    if callback:
+        return HttpResponse(callback + '(' + json.dumps(ret) + ")", mimetype='text/plain')
+    else:
+        return HttpResponse(json.dumps(ret), mimetype='application/json')
 
-class SaveStyleView(View):
-
-    #
-    # this probably all moves to its own view module.  It creates stylesheet entries, or at least I hope it does.
-    #
-    def maybe_string(self, v):
-        try:
-            return float(v)
-        except:
-            return '"' + v + '"' # fixme properly escape quotes and stuff
-
-    def maybe_equals(self, v):
-        try:
-            _ = float(v)
-            return ">="
-        except:
-            return "="
-
-
-    def css_values(self, selector, summary):
-        if summary == 'default':
-            return None, [""]
-        elif summary['kind'] == 'uniform':
-            return None, ["Layer {{ {selector} : {value} }}".format(
-                selector = selector,
-                value = summary['value']
-            )]
-        elif summary['kind'] == 'spread':
-            segments = summary['segments']
-            min_o = summary['min']
-            max_o = summary['max']
-            attribute = summary['attribute']
-            opacity = np.linspace(min_o, max_o, len(segments))
-            return None, ["Layer [{attr} {op} {value}] {{ {key}: {j}; }}".format(
-                    attr=attribute,
-                    value=self.maybe_string(v),
-                    op=self.maybe_equals(v),
-                    key=selector,
-                    j=opacity[i]
-                )
-            for i, v in enumerate(segments)]
-        elif summary['kind'] == 'palette':
-            palette = summary['palette']
-            n = summary['n']
-            segments = summary['segments']
-            return palette, ["""Layer [{attr} {op} {value}] {{ {key}: @{palette}_{n}_{i}; }}""".format(
-                    attr=summary['attribute'],
-                    value=self.maybe_string(v),
-                    op=self.maybe_equals(v),
-                    key=selector,
-                    palette=palette,
-                    n=n,
-                    i=i
-            ) for i, v in enumerate(segments)]
-        elif summary['kind'] == 'labels':
-            text_face_name = summary['font']
-            text_size = summary['textSize']
-            text_color = summary['textColor']
-            attribute = summary['attribute']
-            return None, ["""
-Layer {attribute} {{
-    text-face-name: "{text_face_name}";
-    text-size: {text_size};
-    text-color: {text_color};
-}}""".format(
-                attribute = attribute,
-                text_face_name = text_face_name,
-                text_size = text_size,
-                text_color = text_color
-            )]
-
-    def post(self, request, *args, **kwargs):
-        summary = json.loads(request.POST['stylesheet'])
-        existing_or_new = request.POST['existing_or_new']
-        existing_layer_name = request.POST['existing_layer_name']
-        new_layer_name = request.POST['new_layer_name']
-        style_name = request.POST['style_name']
-        resource = request.POST['resource']
-
-        print request.POST['stylesheet']
-
-        stylesheet = []
-        palette1, polygon_fill = self.css_values('polygon-fill', summary['polygon-fill'])
-        stylesheet.extend(polygon_fill)
-
-        stylesheet.extend(self.css_values('polygon-opacity', summary['polygon-opacity'])[1])
-        palette2, line_color = self.css_values('line-color', summary['line-color'])
-        stylesheet.extend(line_color)
-        stylesheet.extend(self.css_values('line-opacity', summary['line-opacity'])[1])
-        stylesheet.extend(self.css_values('point-width', summary['point-width'])[1])
-        stylesheet.extend(self.css_values(None, summary['labels'])[1])
-        stylesheet = ''.join(stylesheet)
-
-        palettes = ''
-        if palette1:
-            palettes += open('assets/{pal}.casc'.format(pal=palette1)).read()
-        if palette2 and palette2 != palette1:
-            palettes += open('assets/{pal}.casc'.format(pal=palette2)).read()
-
-        stylesheet = """
-{palettes}
-
-Layer {{
-    line-width: 1;
-}}
-
-{stylesheet}
-    """.format(stylesheet=stylesheet, palettes=palettes)
-
-        style = models.Style.objects.create(
-            title=style_name,
-            stylesheet=stylesheet
-        )
-        if existing_or_new == 'existing':
-            layer = models.RenderedLayer.objects.get(slug=existing_layer_name)
-            layer.styles.add(style)
-        else:
-            layer = models.RenderedLayer.objects.create(
-                data_resource=models.DataResource.objects.get(slug=resource),
-                default_style = style,
-                title = new_layer_name,
-                content = ''
-            )
-            layer.styles_set.add(style)
-
-
-        return HttpResponse('{{"url" : "/{redirect}?style={style}"}}'.format(
-            redirect = layer.slug,
-            style = style.slug
-        ), mimetype='application/json')
 
 class WMSAdapter(wms.WMSAdapterBase):
-    #def get_cache_record(self, layers, srs, bbox, width, height, styles, format, bgcolor, transparent, time, elevation, v, filter, **kwargs):
-    #    """see if we already have a cache entry prepared and if so read and return it"""
-
     def layerlist(self):
         return [l.slug for l in models.RenderedLayer.objects.all()]
 

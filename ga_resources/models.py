@@ -74,6 +74,8 @@ class SpatialMetadata(models.Model):
     three_d = models.BooleanField(default=False)
     native_srs = models.TextField(null=True, blank=True)
 
+    objects = models.GeoManager()
+
 class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
     resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
@@ -173,13 +175,21 @@ class RelatedResource(Page, RichText):
 
     resource_file = models.FileField(upload_to='ga_resources')
     foreign_resource = models.ForeignKey(DataResource)
-    foreign_key = models.CharField(max_length=64)
-    local_key = models.CharField(max_length=64)
+    foreign_key = models.CharField(max_length=64, blank=True, null=True)
+    local_key = models.CharField(max_length=64, blank=True, null=True)
+    left_index = models.BooleanField(default=False)
+    right_index = models.BooleanField(default=False)
+    how = models.CharField(max_length=8, default='left', choices=(
+        ('left','left'),
+        ('right','right'),
+        ('outer','outer'),
+        ('inner','inner'),
+    ))
     driver = models.CharField(max_length=255,default='ga_resources.drivers.related.excel')
     key_transform = models.IntegerField(blank=True, null=True, choices=(
         (CAPITALIZE, "Capitalize"),
-        (LOWERCASE, "Lower-case"),
-        (UPPERCASE, "Upper-case")
+        (LOWERCASE, "Lower case"),
+        (UPPERCASE, "Upper case")
     ))
 
     @property

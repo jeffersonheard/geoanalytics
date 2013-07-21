@@ -26,8 +26,18 @@ class Application(Page, RichText):
     link_tags = models.TextField(blank=True)
     application_script = models.FileField(upload_to="applications", null=True, blank=True)
     application_css = models.FileField(upload_to="applications", null=True, blank=True)
+    left_sidebar_html = models.TextField(blank=True, null=True)
+    right_sidebar_html = models.TextField(blank=True, null=True)
+    left_sidebar_columns = models.IntegerField(default=0)
+    right_sidebar_columns = models.IntegerField(default=0)
+    header_html = models.TextField(blank=True, null=True)
+    footer_html = models.TextField(blank=True, null=True)
     renderedlayers = models.ManyToManyField(through="ApplicationLayer", blank=True, to='ga_resources.RenderedLayer')
     default_includes = models.BooleanField(default=True)
+
+    @property
+    def remainder(self):
+        return 12 - (self.left_sidebar_columns + self.right_sidebar_columns)
 
 class ApplicationLayer(models.Model):
     application = models.ForeignKey(Application)
