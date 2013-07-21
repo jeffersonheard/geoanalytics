@@ -52,7 +52,7 @@ class Driver(object):
         sh.zip('-r', tempfile + '.zip', sh.glob(tempfile + "/*"))
 
         with open(tempfile + '.zip') as input:
-            models.DataResource.objects.create(
+            ds = models.DataResource.objects.create(
                 title = dataset_title,
                 parent = parent if parent else self.resource.parent,
                 resource_file = File(input)
@@ -60,6 +60,8 @@ class Driver(object):
 
         os.unlink(tempfile + '.zip')
         shutil.rmtree(tempfile)
+
+        return ds
 
 
 
