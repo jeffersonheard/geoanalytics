@@ -1,5 +1,5 @@
 from django.conf.urls import patterns, url, include
-from ga_resources import api, views
+from ga_resources import api, views, signals
 
 urlpatterns = patterns('',
     url(r'^resources/', include(api.resources.urls)),

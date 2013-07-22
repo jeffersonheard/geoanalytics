@@ -13,6 +13,7 @@ import requests
 import re
 from django.conf import settings
 from ga_resources import predicates
+from ga_resources.models import SpatialMetadata
 
 from osgeo import osr
 
@@ -123,6 +124,10 @@ class Driver(object):
         if md5sum != self.resource.md5sum:
             self.resource.md5sum = md5sum
             self.resource.last_change = datetime.utcnow().replace(tzinfo=utc)
+
+        if not self.resource.spatial_metadata:
+            self.resource.spatial_metadata = SpatialMetadata.objects.create()
+
 
     def get_metadata(self, **kwargs):
         """If there is metadata conforming to some standard, then return it here"""

@@ -119,17 +119,6 @@ class DataResource(Page, RichText):
             sh.rm('-rf', self.cache_path)
             s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
 
-
-    def refresh(self):
-        """
-        Called by the automatic refresh mechanism
-
-        :return:
-        """
-        self.modified()
-        self.driver_instance.compute_fields()
-
-
     @property
     def cache_path(self):
         p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
@@ -137,22 +126,6 @@ class DataResource(Page, RichText):
             os.makedirs(p)  # just in case it's not there yet.
         return p
 
-def dataresource_pre_save(sender, instance, *args, **kwargs):
-    if 'created' in kwargs and kwargs['created']:
-        instance.last_refresh = instance.last_refresh or datetime.datetime.utcnow().replace(tzinfo=utc)
-        if instance.refresh_every:
-            instance.next_refresh = instance.last_refresh + instance.refresh_every
-
-
-def dataresource_post_save(sender, instance, *args, **kwargs):
-    if instance.status == CONTENT_STATUS_PUBLISHED:
-        if not instance.spatial_metadata:
-            instance.spatial_metadata = SpatialMetadata.objects.create()
-            instance.driver_instance.compute_fields()
-            instance.save()
-
-pre_save.connect(dataresource_pre_save, sender=DataResource, weak=False)
-post_save.connect(dataresource_post_save, sender=DataResource, weak=False)
 
 
 class OrderedResource(models.Model):
@@ -230,19 +203,3 @@ class RenderedLayer(Page, RichText):
     cache_seconds = models.PositiveIntegerField(default=60)
 
 
-
-
-def purge_cache_on_save(sender, instance, created, *args, **kwargs):
-    """Signal handler for styles and data resources that purges the cache using a redis set of files associated with the thing"""
-    if not created:
-        instance.modified()
-
-def purge_cache_on_delete(sender, instance, *args, **kwargs):
-    purge_cache_on_save(sender, instance, False, *args, **kwargs)
-    s.WMS_CACHE_DB.delete(instance.slug)
-
-
-post_save.connect(purge_cache_on_save, sender=Style, weak=False)
-post_save.connect(purge_cache_on_save, sender=DataResource, weak=False)
-pre_delete.connect(purge_cache_on_delete, sender=Style, weak=False)
-pre_delete.connect(purge_cache_on_delete, sender=DataResource, weak=False)
