@@ -26,3 +26,4 @@ aptitude install libxslt1-dev libxslt1
 aptitude install liblapack-dev libblas-dev
 aptitude install grass
 aptitude install libgdal1-1.9.0-grass
+aptitude install nodejs npm
