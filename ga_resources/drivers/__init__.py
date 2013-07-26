@@ -108,7 +108,7 @@ class Driver(object):
         if changed:
             self.compute_fields(**kwargs)
 
-        return self.resource.slug, self.resource.spatial_metadata.srs
+        return self.resource.slug, self.resource.srs
 
     def compute_fields(self, **kwargs):
         self.ensure_local_file()

@@ -59,17 +59,17 @@
             var json = new OpenLayers.Format.GeoJSON();
             var bounds = [];
             var layers = [new OpenLayers.Layer.Google("Google", {type: google.maps.MapTypeId.HYBRID, numZoomLevels: 20})];
-            {% for p in page.application.application_layers_set.all %}
+            {% for p in page.application.renderedlayers.all %}
                 layers.push(new OpenLayers.Layer.WMS('{{ p.renderedlayer.title }}', "/ga_resources/wms/", {
                     styles: "{{ p.renderedlayer.default_style.slug }}",
                     layers: "{{ p.renderedlayer.slug }}",
                     transparent: true
                 }));
-                bounds.push(wkt.read("{{ page.application.application_layers_set.all.0.data_resource.spatial_metadata.bounding_box.wkt }}").feature.geometry.getBounds());
+                bounds.push(wkt.read("{{ p.data_resource.spatial_metadata.bounding_box.wkt }}").geometry.getBounds());
             {% endfor %}
 
             var map = new OpenLayers.Map({ div: 'map', projection: "EPSG:3857", layers: layers });
-            map.zoomToExtent(bounds[0]);
+            if(bounds.length) { map.zoomToExtent(bounds[0]); } else { map.zoomToMaxExtent(); }
         });
     </script>
     {{ page.application.script_tags }}
@@ -84,6 +84,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <link rel="stylesheet" href="http://openlayers.org/dev/theme/default/style.css" type="text/css">
+    <link rel="stylesheet" href="{{ STATIC_URL }}css/ga_resources.css"/>
+
     <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
     <!--[if lt IE 9]>
       <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
