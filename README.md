@@ -73,10 +73,7 @@ a number of reusable apps that work in concert:
 * ga\_resources : Data publishing, semantics, and metadata.  WMS and soon to be
   WFS web services that provide OGC standard ways of accessing and visualizing
   datasets on a map or providing them to be consumed GIS or analytics systems
-  like Arc, SAS, or qGIS.  
-* ga\_bigboard : A collaborative environment that provides "teleconferencing
-  over maps". Layering, drawing, and real-time conferencing system for decision 
-  support and education.
+  like Arc, SAS, or qGIS.
 * ga\_interactive : An interactive shell built on IPython Notebook that allows
   power users (analysts and so on) to hack the system from inside a
   web-browser, analyzing data using high-performance libraries, the GRASS GIS,
