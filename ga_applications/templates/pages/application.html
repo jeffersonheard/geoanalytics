@@ -1,5 +1,7 @@
 {% extends "pages/page_nosidebars.html" %}
 {% load mezzanine_tags %}
+{% load pages_tags %}
+{% set_page_permissions %}
 
 {% block main %}{{ block.super }}
 
@@ -26,15 +28,21 @@
             <div class="span{{ page.application.right_sidebar_columns }}">{{ page.application.right_sidebar_html }}</div>
         {% endautoescape %}
     {% endif %}
+    </div>
 
+    {% if page.application.footer_html %}
     <div class="row-fluid">
     {% autoescape off %}
         {{ page.application.footer_html }}
     {% endautoescape %}
     </div>
+    {% endif %}
+    <hr>
+    {% editable page.application.content %}
+        {{ page.application.content|richtext_filter|safe }}
+    {% endeditable %}
 
 
-    </div>
 
 {% endblock %}
 
