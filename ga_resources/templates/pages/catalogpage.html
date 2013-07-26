@@ -23,7 +23,12 @@
                 <h2>{{ page.title }}</h2>
                 <ul class="nav nav-list">
                     {% for child in page.children.all %}
+                        {% ifequal child.status 2 %}
                         <li><a href="/{{ child.slug }}">{{ child.title }}</a></li>
+                        {% else %} 
+       
+                        <li>{{ child.title }}</li>
+                        {% endifequal %}
                     {% endfor %}
                 </ul>
             {% endif %}
@@ -32,7 +37,7 @@
 
     <hr>
 
-    {% if page.perms.add %}
+    {% if perms.page.add %}
         {% subpage_button %}
     {% endif %}
 

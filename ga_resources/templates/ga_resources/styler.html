@@ -15,12 +15,7 @@ div.tableContainer {
 {% endblock %}
 
 {% block extra_js %}
-    <script type="text/javascript" src='{{ STATIC_URL }}js/underscore.js'></script>
-    <script type="text/javascript" src='{{ STATIC_URL }}js/json2.js'></script>
-    <script type="text/javascript" src='{{ STATIC_URL }}js/backbone.js'></script>
-    <script type="text/javascript" src='{{ STATIC_URL }}js/backbone.wreqr.js'></script>
-    <script type="text/javascript" src='{{ STATIC_URL }}js/backbone.marionette.js'></script>
-    <script type="text/javascript" src='{{ STATIC_URL }}js/jqcsrf.js'></script>
+    {% include 'ga_resources/application_scripts.html' %}
 
     <script id="tpl-label-styler" type="text/template">
         {# the label font #}

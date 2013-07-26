@@ -51,10 +51,10 @@ class User(ModelResource):
         resource_name = "user"
 
 
-class AncillaryResource(AbstractPageResource):
+class RelatedResource(AbstractPageResource):
     class Meta(BaseMeta):
-        queryset = models.AncillaryResource.objects.all()
-        resource_name = "ancillary"
+        queryset = models.RelatedResource.objects.all()
+        resource_name = "related"
 
 class SpatialMetadata(ModelResource):
     class Meta:
@@ -82,7 +82,7 @@ class ResourceGroup(AbstractPageResource):
 resources = Api()
 resources.register(User())
 resources.register(Group())
-resources.register(AncillaryResource())
+resources.register(RelatedResource())
 resources.register(SpatialMetadata())
 resources.register(DataResource())
 resources.register(ResourceGroup())

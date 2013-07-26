@@ -1,5 +1,5 @@
 import json
-from lxml import etree
+from django.utils.timezone import utc
 import mapnik
 from collections import OrderedDict
 from hashlib import md5
@@ -11,10 +11,14 @@ from datetime import datetime
 from urllib2 import urlopen
 import requests
 import re
+from django.conf import settings
+from ga_resources import predicates
+from ga_resources.models import SpatialMetadata
+
+from osgeo import osr
 
 VECTOR = False
 RASTER = True
-
 
 class Driver(object):
     """Abstract class that defines a number of reusable methods to load geographic data and create services from it"""
@@ -34,7 +38,7 @@ class Driver(object):
         cached_filename = self.cached_basename + ext
         self.src_ext = ext
 
-        ready = self.resource.perform_caching and os.path.exists(cached_filename) and not freshen
+        ready = os.path.exists(cached_filename) and not freshen
 
         if not ready:
             if self.resource.resource_file:
@@ -56,12 +60,74 @@ class Driver(object):
         else:
             return False
 
+    @classmethod
+    def supports_mutiple_layers(cls):
+        return True
+
+    @classmethod
+    def supports_download(cls):
+        return True
+
+    @classmethod
+    def supports_related(cls):
+        return True
+
+    @classmethod
+    def supports_upload(cls):
+        return True
+
+    @classmethod
+    def supports_configuration(cls):
+        return True
+
+    @classmethod
+    def supports_point_query(cls):
+        return True
+
+    @classmethod
+    def supports_save(cls):
+        return True
+
+    @classmethod
+    def datatype(cls):
+        return VECTOR
+
+    def filestream(self):
+        self.ensure_local_file()
+        return open(self.cached_basename + self.src_ext)
+
+    def mimetype(self):
+        return "application/octet-stream"
+
     def ready_data_resource(self, **kwargs):
-        """This should return the path to a data file or directory containing a resource that can be read by Mapnik.  Returns a layer spec that goes into compile_layer"""
-        raise NotImplementedError("Method ready_data_resource not implemented in abstract class")
+        """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
+        ignores them"""
+
+        changed = self.resource.spatial_metadata and self.ensure_local_file(
+            freshen='fresh' in kwargs and kwargs['fresh'])
+        if changed:
+            self.compute_fields(**kwargs)
+
+        return self.resource.slug, self.resource.spatial_metadata.srs
 
     def compute_fields(self, **kwargs):
-        raise NotImplementedError("Method compute_fields not implemented in abstract class")
+        self.ensure_local_file()
+
+        filehash = md5()
+        with open(self.cached_basename + self.src_ext) as f:
+            b = f.read(10 * 1024768)
+            while b:
+                filehash.update(b)
+                b = f.read(10 * 1024768)
+
+        md5sum = filehash.hexdigest()
+        if md5sum != self.resource.md5sum:
+            self.resource.md5sum = md5sum
+            self.resource.last_change = datetime.utcnow().replace(tzinfo=utc)
+
+        if not self.resource.spatial_metadata:
+            self.resource.spatial_metadata = SpatialMetadata.objects.create()
+
 
     def get_metadata(self, **kwargs):
         """If there is metadata conforming to some standard, then return it here"""
@@ -77,9 +143,55 @@ class Driver(object):
         filename = os.path.split(self.resource.slug)[-1]
         return os.path.join(self.cache_path, filename + '.' + xtn)
 
-
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
-        raise NotImplementedError("Method get_data_for_point is not implemented in abstract class")
+        _, nativesrs, result = self.ready_data_resource(**kwargs)
+
+        s_srs = osr.SpatialReference()
+        t_srs = osr.SpatialReference()
+
+        if srs.lower().startswith('epsg'):
+            s_srs.ImportFromEPSG(int(srs.split(':')[-1]))
+        else:
+            s_srs.ImportFromProj4(srs.encode('ascii'))
+
+        t_srs.ImportFromProj4(nativesrs.encode('ascii'))
+        crx = osr.CoordinateTransformation(s_srs, t_srs)
+        x1, y1, _ = crx.TransformPoint(wherex, wherey)
+
+        return result, x1, y1
+
+    def as_dataframe(self, **kwargs):
+        raise NotImplementedError("This driver does not support dataframes")
+
+    def summary(self, **kwargs):
+        df = self.as_dataframe(**kwargs)
+        keys = [k for k in df.keys() if k != 'geometry']
+        type_table = {
+            'float64': 'number',
+            'int64': 'number',
+            'object': 'text'
+        }
+
+        ctx = [{'name': k} for k in keys]
+        for i, k in enumerate(keys):
+            s = df[k]
+            ctx[i]['kind'] = type_table[s.dtype.name]
+            ctx[i]['tags'] = [tag for tag in [
+                'unique' if predicates.unique(s) else None,
+                'not null' if predicates.not_null(s) else None,
+                'null' if predicates.some_null(s) else None,
+                'empty' if predicates.all_null(s) else None,
+                'categorical' if predicates.categorical(s) else None,
+                'open ended' if predicates.continuous(s) else None,
+                'mostly null' if predicates.mostly_null(s) else None,
+                'uniform' if predicates.uniform(s) else None
+            ] if tag]
+            if 'categorical' in ctx[i]['tags']:
+                ctx[i]['uniques'] = [x for x in s.unique()]
+            for k, v in s.describe().to_dict().items():
+                ctx[i][k] = v
+
+        return ctx
 
 #
 # See below.  I switched this to Carto, which requires JSON files instead of XML.
@@ -112,19 +224,23 @@ class Driver(object):
 #    sh.cascadenik(name + '.mml', name + '.xml')
 
 
-def compile_layer(layer_id, srs, **parameters):
+def compile_layer(layer_id, srs, css_classes, **parameters):
     return {
         "id" : re.sub('/', '_', layer_id),
         "name" : re.sub('/', '_', layer_id),
+        "class" : ' '.join(css_classes).strip(),
         "srs" : srs,
         "Datasource" : parameters
     }
 
-def compile_mml(srs, stylesheets, *layers):
+def compile_mml(srs, styles, *layers):
+    stylesheets = [m.Style.objects.get(slug=s.split('.')[0]) for s in styles]
+    css_classes = set([s.split('.')[1] if '.' in s else 'default' for s in styles])
+
     mml = {
         'srs' : srs,
         'Stylesheet' : [{ "id" : re.sub('/', '_', stylesheet.slug), "data" : stylesheet.stylesheet} for stylesheet in stylesheets],
-        'Layer' : [compile_layer(layer_id, lsrs, **parms) for layer_id, lsrs, parms in layers]
+        'Layer' : [compile_layer(layer_id, lsrs, css_classes, **parms) for layer_id, lsrs, parms in layers]
     }
     return mml
 
@@ -132,7 +248,8 @@ def compile_mml(srs, stylesheets, *layers):
 def compile_mapfile(name, srs, stylesheets, *layers):
     with open(name + ".mml", 'w') as mapfile:
         mapfile.write(json.dumps(compile_mml(srs, stylesheets, *layers), indent=4))
-    sh.carto(name + '.mml', _out=name + '.xml')
+    carto = sh.Command(settings.CARTO_HOME + "/bin/carto")
+    carto(name + '.mml', _out=name + '.xml')
 
 
 def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
@@ -156,14 +273,12 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
     for layer in layers:
         rendered_layer = m.RenderedLayer.objects.get(slug=layer)
         driver = rendered_layer.data_resource.driver_instance
-        _, layer_spec = driver.ready_data_resource(**kwargs)
+        layer_spec = driver.ready_data_resource(**kwargs)
         layer_specs.append(layer_spec)
 
-    stylesheet_objects = [m.Style.objects.get(slug=style) for style in styles]
     if not os.path.exists(cached_filename + ".xml"):  # not an else as previous clause may remove file.
-        stylesheets = [style for style in stylesheet_objects]
         try:
-            compile_mapfile(cached_filename, srs, stylesheets, *layer_specs)
+            compile_mapfile(cached_filename, srs, styles, *layer_specs)
         except sh.ErrorReturnCode_1, e:
             raise RuntimeError(str(e.stderr))
 
@@ -198,4 +313,3 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
         mapnik.render_to_file(m, filename, fmt)
 
     return filename
-

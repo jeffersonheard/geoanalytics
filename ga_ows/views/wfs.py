@@ -261,7 +261,7 @@ class GeoDjangoWFSAdapter(WFSAdapter):
 
     def get_features(self, request, parms):
         if parms.cleaned_data['stored_query_id']:
-            squid = "SQ_" + params.cleaned_data['stored_query_id']
+            squid = "SQ_" + parms.cleaned_data['stored_query_id']
             try: 
                 return self.__getattribute__(squid)(request, parms)
             except AttributeError:
@@ -284,7 +284,7 @@ class GeoDjangoWFSAdapter(WFSAdapter):
         sort_by = parms.cleaned_data['sort_by']
         count = parms.cleaned_data['count']
         if not count:
-            count = parms.cleand_data['max_features']
+            count = parms.cleaned_data['max_features']
         start_index = parms.cleaned_data['start_index']
         srs_name = parms.cleaned_data['srs_name'] # assume bbox is in this
         srs_format = parms.cleaned_data['srs_format'] # this can be proj, None (srid), srid, or wkt.
@@ -466,6 +466,10 @@ class GetFeatureMixin(WFSBase):
     def GetFeature(self, request, kwargs):
         """
         """
+        mimetypes = {
+            'GeoJSON' : 'application/json'
+        }
+
         if 'xml' in kwargs:
             parms = self._parse_xml_GetFeature(kwargs['xml'])
         else:
@@ -542,7 +546,7 @@ class GetFeatureMixin(WFSBase):
             rdata = responsef.read()
             responsef.close()
             os.unlink(tmpname)
-            return HttpResponse(rdata, mimetype=output_format)
+            return HttpResponse(rdata, mimetype=mimetypes.get(output_format,'text/plain'))
         else:
             raise OperationProcessingFailed.at('GetFeature', 'outputFormat {of} not supported ({formats})'.format(of=output_format, formats=drivers.keys()))
 

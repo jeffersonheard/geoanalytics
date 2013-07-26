@@ -1,13 +1,16 @@
+from django.contrib.gis.geos import Polygon, GEOSGeometry
 from ga_ows.views import wfs, wms
-from ga_resources import models, drivers, predicates
-from django.views.generic import TemplateView, View
+from ga_resources import models, drivers
 import json
-from django.http import HttpResponse, HttpResponseRedirect
-import numpy as np
-from osgeo import osr
+from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
+from ga_resources.drivers import shapefile
+from ga_resources.models import DataResource
+from osgeo import osr, ogr
 import importlib
 from mezzanine.pages.models import Page
 from mezzanine.utils.urls import admin_url
+from django.shortcuts import get_object_or_404
+from hashlib import md5
 
 def create_page(request):
     models = request.GET['module']
@@ -29,184 +32,53 @@ def delete_page(request):
     p.delete()
     return HttpResponseRedirect(to.get_absolute_url())
 
-class StylerView(TemplateView):
-    template_name = 'ga_resources/styler.html'
+def download_file(request, *args, **kwargs):
+    slug, ext = kwargs['slug'].split('.')
+    drv = get_object_or_404(DataResource, slug=slug)
+    if drv.driver_instance.supports_download():
+        rsp = HttpResponse(drv.driver_instance.filestream(), mimetype=drv.driver_instance.mimetype())
+        rsp['Content-Disposition'] = 'attachment; filename="{filename}"'.format(filename=drv.slug.split('/')[-1] + '.' + ext)
+        return rsp
+    else:
+        return HttpResponseNotFound()
 
-    def get_context_data(self, **kwargs):
-        ctx = super(StylerView, self).get_context_data(**kwargs)
-        ctx['installed_fonts'] = ['DejaVu Sans Book']
+def search_catalog(request, *args, **kwargs):
+    """A spatial search for the DataResource catalog. In the future, this will be more thorough, but right now it looks
+    for a filter parameter in the request, and inside that a JSON payload including a bbox four-tuple of minx, maxx
+     miny, maxy OR a geometry wkt and an optional srid.  It then performs a broad overlap search and returns the results
+     as a JSON or JSONP list of::
 
-        resource_slug = self.request.GET['resource']
-        resource = models.DataResource.objects.get(slug=resource_slug)
+        [{ "title" : "title",
+           "path" : ["breadcrumps", "to", "resource"],
+           "url" : "http://mydomain/ga_resources/path/to/resource/title"
+        }]
+    """
+    flt = json.loads(request.REQUEST['filter'])
+    if 'bbox' in flt:
+        minx, miny, maxx, maxy = flt['bbox']
+        geometry = Polygon.from_bbox((minx, miny, maxx, maxy))
+    else:
+        geometry = GEOSGeometry(flt['boundary'])
 
-        drv = resource.driver_instance
-        df = drv.as_dataframe()
-        keys = [k for k in df.keys() if k != 'geometry']
-        type_table = {
-            'float64' : 'number',
-            'int64' : 'number',
-            'object' : 'text'
-        }
-        ctx['resource'] = resource
-        ctx['new_service'] = 'new' in self.request.GET and self.request.GET['new']
+    if 'srid' in flt:
+        geometry.set_srid(flt['srid'])
 
-        ctx['attrs'] = [{ 'name' : k } for k in keys]
-        for i, k in enumerate(keys):
-            s = df[k]
-            ctx['attrs'][i]['kind'] = type_table[s.dtype.name]
-            ctx['attrs'][i]['tags'] = [tag for tag in [
-                'unique' if predicates.unique(s) else None,
-                'not null' if predicates.not_null(s) else None,
-                'null' if predicates.some_null(s) else None,
-                'empty' if predicates.all_null(s) else None,
-                'categorical' if predicates.categorical(s) else None,
-                'open ended' if predicates.continuous(s) else None,
-                'mostly null' if predicates.mostly_null(s) else None,
-                'uniform' if predicates.uniform(s) else None
-            ] if tag]
-            if 'categorical' in ctx['attrs'][i]['tags']:
-                ctx['attrs'][i]['uniques'] = [x for x in s.unique()]
-            for k, v in s.describe().to_dict().items():
-                ctx['attrs'][i][k] = v
-        ctx['attrs'] = json.dumps(ctx['attrs'], indent=2)
+    results = models.SpatialMetadata.objects.filter(geometry__overlaps=geometry)
+    ret = [{ 'title' : r.title, 'path' : r.slug.split('/')[:-1], 'url' : r.get_abolute_url() } for r in results]
 
-        return ctx
+    callback = None
+    if 'jsonCallback' in request.REQUEST:
+        callback = request.REQUEST['jsonCallback']
+    elif 'callback' in request.REQUEST:
+        callback = request.REQUEST['callback']
 
-class SaveStyleView(View):
+    if callback:
+        return HttpResponse(callback + '(' + json.dumps(ret) + ")", mimetype='text/plain')
+    else:
+        return HttpResponse(json.dumps(ret), mimetype='application/json')
 
-    #
-    # this probably all moves to its own view module.  It creates stylesheet entries, or at least I hope it does.
-    #
-    def maybe_string(self, v):
-        try:
-            return float(v)
-        except:
-            return '"' + v + '"' # fixme properly escape quotes and stuff
-
-    def maybe_equals(self, v):
-        try:
-            _ = float(v)
-            return ">="
-        except:
-            return "="
-
-
-    def css_values(self, selector, summary):
-        if summary == 'default':
-            return None, [""]
-        elif summary['kind'] == 'uniform':
-            return None, ["Layer {{ {selector} : {value} }}".format(
-                selector = selector,
-                value = summary['value']
-            )]
-        elif summary['kind'] == 'spread':
-            segments = summary['segments']
-            min_o = summary['min']
-            max_o = summary['max']
-            attribute = summary['attribute']
-            opacity = np.linspace(min_o, max_o, len(segments))
-            return None, ["Layer [{attr} {op} {value}] {{ {key}: {j}; }}".format(
-                    attr=attribute,
-                    value=self.maybe_string(v),
-                    op=self.maybe_equals(v),
-                    key=selector,
-                    j=opacity[i]
-                )
-            for i, v in enumerate(segments)]
-        elif summary['kind'] == 'palette':
-            palette = summary['palette']
-            n = summary['n']
-            segments = summary['segments']
-            return palette, ["""Layer [{attr} {op} {value}] {{ {key}: @{palette}_{n}_{i}; }}""".format(
-                    attr=summary['attribute'],
-                    value=self.maybe_string(v),
-                    op=self.maybe_equals(v),
-                    key=selector,
-                    palette=palette,
-                    n=n,
-                    i=i
-            ) for i, v in enumerate(segments)]
-        elif summary['kind'] == 'labels':
-            text_face_name = summary['font']
-            text_size = summary['textSize']
-            text_color = summary['textColor']
-            attribute = summary['attribute']
-            return None, ["""
-Layer {attribute} {{
-    text-face-name: "{text_face_name}";
-    text-size: {text_size};
-    text-color: {text_color};
-}}""".format(
-                attribute = attribute,
-                text_face_name = text_face_name,
-                text_size = text_size,
-                text_color = text_color
-            )]
-
-    def post(self, request, *args, **kwargs):
-        summary = json.loads(request.POST['stylesheet'])
-        existing_or_new = request.POST['existing_or_new']
-        existing_layer_name = request.POST['existing_layer_name']
-        new_layer_name = request.POST['new_layer_name']
-        style_name = request.POST['style_name']
-        resource = request.POST['resource']
-
-        print request.POST['stylesheet']
-
-        stylesheet = []
-        palette1, polygon_fill = self.css_values('polygon-fill', summary['polygon-fill'])
-        stylesheet.extend(polygon_fill)
-
-        stylesheet.extend(self.css_values('polygon-opacity', summary['polygon-opacity'])[1])
-        palette2, line_color = self.css_values('line-color', summary['line-color'])
-        stylesheet.extend(line_color)
-        stylesheet.extend(self.css_values('line-opacity', summary['line-opacity'])[1])
-        stylesheet.extend(self.css_values('point-width', summary['point-width'])[1])
-        stylesheet.extend(self.css_values(None, summary['labels'])[1])
-        stylesheet = ''.join(stylesheet)
-
-        palettes = ''
-        if palette1:
-            palettes += open('assets/{pal}.casc'.format(pal=palette1)).read()
-        if palette2 and palette2 != palette1:
-            palettes += open('assets/{pal}.casc'.format(pal=palette2)).read()
-
-        stylesheet = """
-{palettes}
-
-Layer {{
-    line-width: 1;
-}}
-
-{stylesheet}
-    """.format(stylesheet=stylesheet, palettes=palettes)
-
-        style = models.Style.objects.create(
-            title=style_name,
-            stylesheet=stylesheet
-        )
-        if existing_or_new == 'existing':
-            layer = models.RenderedLayer.objects.get(slug=existing_layer_name)
-            layer.styles.add(style)
-        else:
-            layer = models.RenderedLayer.objects.create(
-                data_resource=models.DataResource.objects.get(slug=resource),
-                default_style = style,
-                title = new_layer_name,
-                content = ''
-            )
-            layer.styles_set.add(style)
-
-
-        return HttpResponse('{{"url" : "/{redirect}?style={style}"}}'.format(
-            redirect = layer.slug,
-            style = style.slug
-        ), mimetype='application/json')
 
 class WMSAdapter(wms.WMSAdapterBase):
-    #def get_cache_record(self, layers, srs, bbox, width, height, styles, format, bgcolor, transparent, time, elevation, v, filter, **kwargs):
-    #    """see if we already have a cache entry prepared and if so read and return it"""
-
     def layerlist(self):
         return [l.slug for l in models.RenderedLayer.objects.all()]
 
@@ -277,15 +149,15 @@ class WMSAdapter(wms.WMSAdapterBase):
         for layer in layers:
             desc = {}
             ret.append(desc)
-            desc['"name"'] = layer.slug
+            desc["name"] = layer.slug
             desc['title'] = layer.title
             desc['srs'] = layer.data_resource.spatial_metadata.native_srs
             desc['queryable'] = True
-            desc['minx'], desc['miny'], desc['maxx'], desc['maxy'] = layer.data_resource.native_bounding_box.extent  # FIXME this is not native
-            desc['ll_minx'], desc['ll_miny'], desc['ll_maxx'], desc['ll_maxy'] = layer.data_resource.bounding_box.extent
+            desc['minx'], desc['miny'], desc['maxx'], desc['maxy'] = layer.data_resource.spatial_metadata.native_bounding_box.extent  # FIXME this is not native
+            desc['ll_minx'], desc['ll_miny'], desc['ll_maxx'], desc['ll_maxy'] = layer.data_resource.spatial_metadata.bounding_box.extent
             desc['styles'] = []
             desc['styles'].append({
-                '"name"' : layer.default_style.slug,
+                "name" : layer.default_style.slug,
                 'title' : layer.default_style.title,
                 'legend_width' : layer.default_style.legend_width,
                 'legend_height' : layer.default_style.legend_height,
@@ -293,7 +165,7 @@ class WMSAdapter(wms.WMSAdapterBase):
             })
             for style in layer.styles.all():
                 desc['styles'].append({
-                    '"name"' : style.slug,
+                    "name" : style.slug,
                     'title' : style.title,
                     'legend_width' : style.legend_width,
                     'legend_height' : style.legend_height,
@@ -314,3 +186,110 @@ class WMSAdapter(wms.WMSAdapterBase):
 
 class WMS(wms.WMS):
     adapter = WMSAdapter([])
+
+class WFSAdapter(wfs.WFSAdapter):
+    def get_feature_descriptions(self, request, *types):
+        namespace = request.build_absolute_uri().split('?')[0] + "/schema" # todo: include https://bitbucket.org/eegg/django-model-schemas/wiki/Home
+
+        for type_name in types:
+            res = get_object_or_404(models.DataResource, slug=type_name)
+
+            yield wfs.FeatureDescription(
+                ns=namespace,
+                ns_name='ga_resources',
+                name=res.slug,
+                abstract=res.description,
+                title=res.title,
+                keywords=res.keywords,
+                srs=res.spatial_metadata.native_srs,
+                bbox=res.spatial_metadata.bounding_box,
+                schema=namespace + '/' + res.slug
+            )
+
+    def list_stored_queries(self, request):
+        """list all the queries associated with drivers"""
+        sq = super(WFSAdapter, self).list_stored_queries(request)
+        return sq
+
+    def get_features(self, request, parms):
+        if parms.cleaned_data['stored_query_id']:
+            squid = "SQ_" + parms.cleaned_data['stored_query_id']
+            slug = parms.cleaned_data['type_names'] if isinstance(parms.cleaned_data['type_names'], basestring) else parms.cleaned_data['type_names'][0]
+            try:
+                return models.DataResource.driver_instance.query_operation(squid)(request, **parms.cleaned_data)
+            except:
+                raise wfs.OperationNotSupported.at('GetFeatures', 'stored_query_id={squid}'.format(squid=squid))
+        else:
+            return self.AdHocQuery(request, **parms.cleaned_data)
+
+    def AdHocQuery(self, req,
+       type_names=None,
+       filter=None,
+       filter_language=None,
+       bbox=None,
+       sort_by=None,
+       count=None,
+       start_index=None,
+       srs_name=None,
+       srs_format=None,
+       max_features=None,
+       **kwargs
+    ):
+        model = get_object_or_404(models.DataResource, slug=type_names[0])
+        driver = model.driver_instance
+
+        extra = {}
+        if filter:
+            extra['filter'] = json.loads(filter)
+
+        if bbox:
+            extra['bbox'] = bbox
+
+        if srs_name:
+            srs = osr.SpatialReference()
+            if srs_name.lower().startswith('epsg'):
+                srs.ImportFromEPSG(int(srs_name[5:]))
+            else:
+                srs.ImportFromProj4(srs_name)
+            extra['srs'] = srs
+        else:
+            srs = model.srs
+
+        if start_index:
+            extra['start'] = start_index
+
+        count = count or max_features
+        if count:
+            extra['count'] = count
+
+        if "boundary" in kwargs:
+            extra['boundary'] = kwargs['boundary']
+            extra['boundary_type'] = kwargs['boundary_type']
+
+        df = driver.as_dataframe(**extra)
+
+        if sort_by:
+            extra['sort_by'] = sort_by
+
+        if filter_language and filter_language != 'json':
+            raise wfs.OperationNotSupported('filter language must be JSON for now')
+
+        filename = md5()
+
+        filename.update("{name}.{bbox}.{srs_name}x{filter}".format(
+            name=type_names[0],
+            bbox=','.join(str(b) for b in bbox),
+            srs_name=srs_name,
+            filter=filter
+        ))
+        filename = filename.hexdigest()
+        shapefile.ShapefileDriver.from_dataframe(df, filename, srs)
+        ds = ogr.Open(filename)
+        return ds
+
+    def supports_feature_versioning(self):
+        return False
+
+class WFS(wfs.WFS):
+    adapter=WFSAdapter()
+
