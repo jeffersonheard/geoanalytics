@@ -1,8 +1,7 @@
 from mezzanine.pages.models import Page
-from mezzanine.core.models import RichText, CONTENT_STATUS_DRAFT, CONTENT_STATUS_PUBLISHED
+from mezzanine.core.models import RichText
 from mezzanine.core.managers import SearchableManager
 from django.contrib.gis.db import models
-from django.db.models.signals import post_save, pre_delete, pre_save
 from django.conf import settings as s
 import importlib
 from timedelta.fields import TimedeltaField
@@ -12,6 +11,7 @@ from osgeo import osr
 import datetime
 from django.utils.timezone import utc
 from logging import getLogger
+import json
 
 _log = getLogger('ga_resources')
 
@@ -90,6 +90,7 @@ class DataResource(Page, RichText):
     metadata_xml = models.TextField(null=True, blank=True)
     spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
     driver = models.CharField(default='ga_resources.drivers.shapefile', max_length=255, null=False, blank=False)
+    big = models.BooleanField(default=False, help_text='Set this to be true if the dataset is more than 100MB') # causes certain drivers to optimize for datasets larger than memory
 
     class Meta:
         ordering = ['title']
@@ -125,6 +126,10 @@ class DataResource(Page, RichText):
         if not os.path.exists(p):
             os.makedirs(p)  # just in case it's not there yet.
         return p
+
+    @property
+    def driver_config(self):
+        return json.loads(self.resource_config) if self.resource_config else {}
 
 
 

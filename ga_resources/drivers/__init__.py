@@ -111,19 +111,18 @@ class Driver(object):
         return self.resource.slug, self.resource.srs
 
     def compute_fields(self, **kwargs):
-        self.ensure_local_file()
-
-        filehash = md5()
-        with open(self.cached_basename + self.src_ext) as f:
-            b = f.read(10 * 1024768)
-            while b:
-                filehash.update(b)
+        if self.ensure_local_file() is not None:
+            filehash = md5()
+            with open(self.cached_basename + self.src_ext) as f:
                 b = f.read(10 * 1024768)
+                while b:
+                    filehash.update(b)
+                    b = f.read(10 * 1024768)
 
-        md5sum = filehash.hexdigest()
-        if md5sum != self.resource.md5sum:
-            self.resource.md5sum = md5sum
-            self.resource.last_change = datetime.utcnow().replace(tzinfo=utc)
+            md5sum = filehash.hexdigest()
+            if md5sum != self.resource.md5sum:
+                self.resource.md5sum = md5sum
+                self.resource.last_change = datetime.utcnow().replace(tzinfo=utc)
 
         if not self.resource.spatial_metadata:
             self.resource.spatial_metadata = SpatialMetadata.objects.create()
@@ -229,7 +228,7 @@ def compile_layer(layer_id, srs, css_classes, **parameters):
         "id" : re.sub('/', '_', layer_id),
         "name" : re.sub('/', '_', layer_id),
         "class" : ' '.join(css_classes).strip(),
-        "srs" : srs,
+        "srs" : srs if isinstance(srs, basestring) else srs.ExportToProj4(),
         "Datasource" : parameters
     }
 
