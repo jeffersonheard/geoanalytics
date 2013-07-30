@@ -1,7 +1,8 @@
 # from ga_ows.views import wms, wfs
+import pandas
 from django.conf import settings as s
 from django.contrib.gis.geos import Polygon, GEOSGeometry
-from ga_resources.api import SpatialMetadata
+from ga_resources.models import SpatialMetadata
 import os
 from osgeo.ogr import Geometry
 import sh
@@ -101,8 +102,6 @@ class ShapefileDriver(Driver):
         xmin, xmax, ymin, ymax = lyr.GetExtent()
         crs = lyr.GetSpatialRef()
 
-        if not self.resource.spatial_metadata:
-            self.resource.spatial_metadata = SpatialMetadata()
 
         self.resource.spatial_metadata.native_srs = crs.ExportToProj4()
         e4326 = osr.SpatialReference()
@@ -113,8 +112,10 @@ class ShapefileDriver(Driver):
         self.resource.spatial_metadata.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
         self.resource.spatial_metadata.native_bounding_box = Polygon.from_bbox((xmin, ymin, xmax, ymax))
         self.resource.spatial_metadata.three_d = False
+
         self.resource.spatial_metadata.save()
         self.resource.save()
+
 
     def get_data_fields(self, **kwargs):
         _, _, result = self.ready_data_resource(**kwargs)
@@ -249,7 +250,7 @@ class ShapefileDriver(Driver):
             return self._df
 
         elif os.path.exists(dfx_path) and os.stat(dfx_path).st_mtime >= os.stat(shp_path).st_mtime:
-            self._df = DataFrame.load(dfx_path)
+            self._df = pandas.read_pickle(dfx_path)
             return self._df
         else:
             ds = ogr.Open(shp_path)
@@ -258,7 +259,7 @@ class ShapefileDriver(Driver):
                 data=[dict(fid=f.GetFID(), geometry=wkb.loads(f.geometry().ExportToWkb()), **f.items()) for f in lyr if f.geometry()],
                 index='fid'
             )
-            df.save(dfx_path)
+            df.to_pickle(dfx_path)
             self._df = df
             return self._df
 

@@ -168,18 +168,18 @@ class GeotiffDriver(Driver):
             return self._df
 
         elif os.path.exists(dfx_path) and os.stat(dfx_path).st_mtime >= os.stat(tiff_path).st_mtime:
-            self._df = Panel.load(dfx_path)
+            self._df = Panel.read_pickle(dfx_path)
             return self._df
         else:
             ds = gdal.Open(tiff_path)
             try:
                 df= Panel(ds.ReadAsArray())
-                df.save(dfx_path)
+                df.to_pickle(dfx_path)
                 self._df = df
                 return self._df
             except:
                 df = DataFrame(ds.ReadAsArray())
-                df.save(dfx_path)
+                df.to_pickle(dfx_path)
                 self._df = df
                 return self._df
 

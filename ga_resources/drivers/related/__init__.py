@@ -34,9 +34,11 @@ class Driver(object):
         resulting_dataframe = merge(
             original_df,
             my_df,
-            how='left',
+            how=self.resource.how,
             left_on = self.resource.foreign_key,
             right_on = self.resource.local_key,
+            left_index = self.resource.left_index,
+            right_index = self.resource.right_index,
             sort = False
         )
         return resulting_dataframe # as soon as this is working, cache the ever living crap out of it
@@ -50,7 +52,7 @@ class Driver(object):
         sh.zip('-r', tempfile + '.zip', sh.glob(tempfile + "/*"))
 
         with open(tempfile + '.zip') as input:
-            models.DataResource.objects.create(
+            ds = models.DataResource.objects.create(
                 title = dataset_title,
                 parent = parent if parent else self.resource.parent,
                 resource_file = File(input)
@@ -58,6 +60,8 @@ class Driver(object):
 
         os.unlink(tempfile + '.zip')
         shutil.rmtree(tempfile)
+
+        return ds
 
 
 

@@ -1,8 +1,7 @@
 from mezzanine.pages.models import Page
-from mezzanine.core.models import RichText, CONTENT_STATUS_DRAFT, CONTENT_STATUS_PUBLISHED
+from mezzanine.core.models import RichText
 from mezzanine.core.managers import SearchableManager
 from django.contrib.gis.db import models
-from django.db.models.signals import post_save, pre_delete, pre_save
 from django.conf import settings as s
 import importlib
 from timedelta.fields import TimedeltaField
@@ -12,6 +11,7 @@ from osgeo import osr
 import datetime
 from django.utils.timezone import utc
 from logging import getLogger
+import json
 
 _log = getLogger('ga_resources')
 
@@ -74,6 +74,8 @@ class SpatialMetadata(models.Model):
     three_d = models.BooleanField(default=False)
     native_srs = models.TextField(null=True, blank=True)
 
+    objects = models.GeoManager()
+
 class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
     resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
@@ -88,6 +90,7 @@ class DataResource(Page, RichText):
     metadata_xml = models.TextField(null=True, blank=True)
     spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
     driver = models.CharField(default='ga_resources.drivers.shapefile', max_length=255, null=False, blank=False)
+    big = models.BooleanField(default=False, help_text='Set this to be true if the dataset is more than 100MB') # causes certain drivers to optimize for datasets larger than memory
 
     class Meta:
         ordering = ['title']
@@ -117,17 +120,6 @@ class DataResource(Page, RichText):
             sh.rm('-rf', self.cache_path)
             s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
 
-
-    def refresh(self):
-        """
-        Called by the automatic refresh mechanism
-
-        :return:
-        """
-        self.modified()
-        self.driver_instance.compute_fields()
-
-
     @property
     def cache_path(self):
         p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
@@ -135,22 +127,10 @@ class DataResource(Page, RichText):
             os.makedirs(p)  # just in case it's not there yet.
         return p
 
-def dataresource_pre_save(sender, instance, *args, **kwargs):
-    if 'created' in kwargs and kwargs['created']:
-        instance.last_refresh = instance.last_refresh or datetime.datetime.utcnow().replace(tzinfo=utc)
-        if instance.refresh_every:
-            instance.next_refresh = instance.last_refresh + instance.refresh_every
+    @property
+    def driver_config(self):
+        return json.loads(self.resource_config) if self.resource_config else {}
 
-
-def dataresource_post_save(sender, instance, *args, **kwargs):
-    if instance.status == CONTENT_STATUS_PUBLISHED:
-        if not instance.spatial_metadata:
-            instance.spatial_metadata = SpatialMetadata.objects.create()
-            instance.driver_instance.compute_fields()
-            instance.save()
-
-pre_save.connect(dataresource_pre_save, sender=DataResource, weak=False)
-post_save.connect(dataresource_post_save, sender=DataResource, weak=False)
 
 
 class OrderedResource(models.Model):
@@ -173,13 +153,21 @@ class RelatedResource(Page, RichText):
 
     resource_file = models.FileField(upload_to='ga_resources')
     foreign_resource = models.ForeignKey(DataResource)
-    foreign_key = models.CharField(max_length=64)
-    local_key = models.CharField(max_length=64)
+    foreign_key = models.CharField(max_length=64, blank=True, null=True)
+    local_key = models.CharField(max_length=64, blank=True, null=True)
+    left_index = models.BooleanField(default=False)
+    right_index = models.BooleanField(default=False)
+    how = models.CharField(max_length=8, default='left', choices=(
+        ('left','left'),
+        ('right','right'),
+        ('outer','outer'),
+        ('inner','inner'),
+    ))
     driver = models.CharField(max_length=255,default='ga_resources.drivers.related.excel')
     key_transform = models.IntegerField(blank=True, null=True, choices=(
         (CAPITALIZE, "Capitalize"),
-        (LOWERCASE, "Lower-case"),
-        (UPPERCASE, "Upper-case")
+        (LOWERCASE, "Lower case"),
+        (UPPERCASE, "Upper case")
     ))
 
     @property
@@ -220,19 +208,3 @@ class RenderedLayer(Page, RichText):
     cache_seconds = models.PositiveIntegerField(default=60)
 
 
-
-
-def purge_cache_on_save(sender, instance, created, *args, **kwargs):
-    """Signal handler for styles and data resources that purges the cache using a redis set of files associated with the thing"""
-    if not created:
-        instance.modified()
-
-def purge_cache_on_delete(sender, instance, *args, **kwargs):
-    purge_cache_on_save(sender, instance, False, *args, **kwargs)
-    s.WMS_CACHE_DB.delete(instance.slug)
-
-
-post_save.connect(purge_cache_on_save, sender=Style, weak=False)
-post_save.connect(purge_cache_on_save, sender=DataResource, weak=False)
-pre_delete.connect(purge_cache_on_delete, sender=Style, weak=False)
-pre_delete.connect(purge_cache_on_delete, sender=DataResource, weak=False)

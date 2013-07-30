@@ -1,5 +1,5 @@
 from django.conf.urls import patterns, url, include
-from ga_resources import api, views
+from ga_resources import api, views, signals
 
 urlpatterns = patterns('',
     url(r'^resources/', include(api.resources.urls)),
@@ -8,8 +8,6 @@ urlpatterns = patterns('',
     url(r'^wms/', views.WMS.as_view()),
     url(r'^wfs/', views.WFS.as_view()),
     url(r'^download/(?P<slug>.*)$', views.download_file),
-    url(r'^styler/', views.StylerView.as_view()),
-    url(r'^save_style/', views.SaveStyleView.as_view()),
     url(r'^createpage/', views.create_page),
     url(r'^deletepage/', views.delete_page),
 )

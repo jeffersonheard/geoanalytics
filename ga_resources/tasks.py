@@ -15,7 +15,10 @@ def refresh_resource(pk):
     """
     r = DataResource.get(pk=pk)
     try:
-        r.refresh()
+        r.modified()
+        r.driver_instance.compute_fields()
+        if hasattr(r.driver_instance, 'as_dataframe'):
+            k = r.dataframe # force the generationg of the canonical dataframe object
     except:
         print "cannot refresh {s} ({r})".format(s=r.slug, r=r.title) # fixme this should be a log message
 
@@ -39,4 +42,9 @@ def refresh_resources():
     task_grp.apply_async().get()
 
 
-
+@task(ignore_result=True)
+def data_resource_compute_fields(pk):
+    ds = DataResource.objects.get(pk=pk)
+    ds.driver_instance.compute_fields()
+    if hasattr(ds.driver_instance, 'as_dataframe'):
+        k = ds.dataframe # force the generationg of the canonical dataframe object
