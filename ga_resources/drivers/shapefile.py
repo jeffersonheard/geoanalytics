@@ -1,4 +1,5 @@
 # from ga_ows.views import wms, wfs
+import pandas
 from django.conf import settings as s
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 from ga_resources.models import SpatialMetadata
@@ -249,7 +250,7 @@ class ShapefileDriver(Driver):
             return self._df
 
         elif os.path.exists(dfx_path) and os.stat(dfx_path).st_mtime >= os.stat(shp_path).st_mtime:
-            self._df = DataFrame.read_pickle(dfx_path)
+            self._df = pandas.read_pickle(dfx_path)
             return self._df
         else:
             ds = ogr.Open(shp_path)
