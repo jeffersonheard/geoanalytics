@@ -6,13 +6,15 @@
 {% block main %}{{ block.super }}
     <div class='simple-map' id="map" style='width: 100%; height:400px'></div>
     <h6><a href="{{ page.renderedlayer.data_resource.get_absolute_url }}">Link to original data and web-services.</a></h6>
+    {% if page.renderedlayer.default_style.legend %}
+    <p><img src='{{page.renderedlayer.default_style.legend.url}}'/></p>
+    {% endif %}
 
     <h4>Description</h4>
     {% editable page.renderedlayer.content %}
         {{ page.renderedlayer.content|richtext_filter|safe }}
     {% endeditable %}
 
-    <h4><a href="/ga_resources/{{page.renderedlayer.dataresource.slug}}">Link to the data resource.</a></h4>
 
 
 
