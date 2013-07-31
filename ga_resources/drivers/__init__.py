@@ -234,11 +234,11 @@ class Driver(object):
 #    sh.cascadenik(name + '.mml', name + '.xml')
 
 
-def compile_layer(layer_id, srs, css_classes, **parameters):
+def compile_layer(rl, layer_id, srs, css_classes, **parameters):
     return {
         "id" : re.sub('/', '_', layer_id),
         "name" : re.sub('/', '_', layer_id),
-        "class" : ' '.join(css_classes).strip(),
+        "class" : ' '.join(rl.default_class if 'default' else cls for cls in css_classes).strip(),
         "srs" : srs if isinstance(srs, basestring) else srs.ExportToProj4(),
         "Datasource" : parameters
     }
@@ -250,7 +250,7 @@ def compile_mml(srs, styles, *layers):
     mml = {
         'srs' : srs,
         'Stylesheet' : [{ "id" : re.sub('/', '_', stylesheet.slug), "data" : stylesheet.stylesheet} for stylesheet in stylesheets],
-        'Layer' : [compile_layer(layer_id, lsrs, css_classes, **parms) for layer_id, lsrs, parms in layers]
+        'Layer' : [compile_layer(rl, layer_id, lsrs, css_classes, **parms) for rl, (layer_id, lsrs, parms) in layers]
     }
     return mml
 
@@ -284,7 +284,7 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
         rendered_layer = m.RenderedLayer.objects.get(slug=layer)
         driver = rendered_layer.data_resource.driver_instance
         layer_spec = driver.ready_data_resource(**kwargs)
-        layer_specs.append(layer_spec)
+        layer_specs.append((rendered_layer, layer_spec))
 
     if not os.path.exists(cached_filename + ".xml"):  # not an else as previous clause may remove file.
         try:

@@ -4,6 +4,7 @@ from django.conf import settings
 import urllib2
 import sh
 import time
+import shutil
 
 def run_notebook(ipython_arguments):
     ipython_arguments.extend(['--ext', 'django_extensions.management.notebook_extension'])
@@ -25,6 +26,9 @@ def shared_notebook(request, *args, **kwargs):
     notebook_settings.append('--port={port}'.format(port=port)) # ensure a unique port for each user
     notebook_settings.append('--pylab=inline')
     notebook_settings.append('--no-browser')
+
+    if not os.path.exists(settings.IPYTHON_BASE):
+        os.mkdir(settings.IPYTHON_BASE)
 
     if not os.path.exists(user_directory):
         os.mkdir(user_directory)

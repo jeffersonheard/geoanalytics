@@ -23,12 +23,21 @@
                 <h2>{{ page.title }}</h2>
                 <ul class="nav nav-list">
                     {% for child in page.children.all %}
+                        <li>
+
                         {% ifequal child.status 2 %}
-                        <li><a href="/{{ child.slug }}">{{ child.title }}</a></li>
+                        <a href="/{{ child.slug }}" {% ifequal child.content_model 'catalogpage' %}style='color:#860;'{% endifequal %}>
+                            {% ifequal child.content_model 'catalogpage' %}
+                                <i class="icon-briefcase"> </i>
+                            {% else %}
+                                <i class="icon-desktop"> </i>
+                            {% endifequal %}
+                            {{ child.title }}</a>
                         {% else %} 
        
-                        <li>{{ child.title }}</li>
+                        {{ child.title }}
                         {% endifequal %}
+                        </li>
                     {% endfor %}
                 </ul>
             {% endif %}

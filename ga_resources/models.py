@@ -204,6 +204,7 @@ class RenderedLayer(Page, RichText):
     """All the general stuff for a layer.  Layers inherit ownership and group info from the data resource"""
     data_resource = models.ForeignKey(DataResource)
     default_style = models.ForeignKey(Style, related_name='default_for_layer')
+    default_class = models.CharField(max_length=255, default='default')
     styles = models.ManyToManyField(Style)
     cache_seconds = models.PositiveIntegerField(default=60)
 
