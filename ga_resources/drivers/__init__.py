@@ -1,4 +1,5 @@
 import json
+import cPickle
 from django.utils.timezone import utc
 import mapnik
 from collections import OrderedDict
@@ -163,6 +164,12 @@ class Driver(object):
         raise NotImplementedError("This driver does not support dataframes")
 
     def summary(self, **kwargs):
+
+        sum_path = self.get_filename('sum')
+        if self.resource.big and os.path.exists(sum_path):
+            with open(sum_path) as sm:
+                return cPickle.load(sm)
+
         df = self.as_dataframe(**kwargs)
         keys = [k for k in df.keys() if k != 'geometry']
         type_table = {
@@ -189,6 +196,10 @@ class Driver(object):
                 ctx[i]['uniques'] = [x for x in s.unique()]
             for k, v in s.describe().to_dict().items():
                 ctx[i][k] = v
+
+        if self.resource.big:
+            with open(sum_path, 'w') as sm:
+                cPickle.dump(ctx, sm)
 
         return ctx
 
