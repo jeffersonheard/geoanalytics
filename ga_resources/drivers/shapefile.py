@@ -250,7 +250,10 @@ class ShapefileDriver(Driver):
             return self._df
 
         elif os.path.exists(dfx_path) and os.stat(dfx_path).st_mtime >= os.stat(shp_path).st_mtime:
-            self._df = pandas.read_pickle(dfx_path)
+            if self.resource.big:
+                self._df = pandas.read_hdf(dfx_path, 'df')
+            else:
+                self._df = pandas.read_pickle(dfx_path)
             return self._df
         else:
             ds = ogr.Open(shp_path)
@@ -259,7 +262,10 @@ class ShapefileDriver(Driver):
                 data=[dict(fid=f.GetFID(), geometry=wkb.loads(f.geometry().ExportToWkb()), **f.items()) for f in lyr if f.geometry()],
                 index='fid'
             )
-            df.to_pickle(dfx_path)
+            if self.resource.big:
+                df.to_hdf(dfx_path, 'df')
+            else:
+                df.to_pickle(dfx_path)
             self._df = df
             return self._df
 
