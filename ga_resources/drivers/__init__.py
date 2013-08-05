@@ -15,6 +15,7 @@ import re
 from django.conf import settings
 from ga_resources import predicates
 from ga_resources.models import SpatialMetadata
+import time
 
 from osgeo import osr
 
@@ -288,7 +289,9 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
 
     if not os.path.exists(cached_filename + ".xml"):  # not an else as previous clause may remove file.
         try:
-            compile_mapfile(cached_filename, srs, styles, *layer_specs)
+            with open(cached_filename + ".lock", 'w') as w:
+                 compile_mapfile(cached_filename, srs, styles, *layer_specs)
+            os.unlink(cached_filename + ".lock")
         except sh.ErrorReturnCode_1, e:
             raise RuntimeError(str(e.stderr))
 
@@ -317,6 +320,8 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
     if os.path.exists(filename):
         return filename
     else:
+        while os.path.exists(name + ".lock"):
+            time.sleep(0.05)
         m = mapnik.Map(width, height)
         mapnik.load_map(m, name + '.xml')
         m.zoom_to_box(mapnik.Box2d(*bbox))
