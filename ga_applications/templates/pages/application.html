@@ -57,6 +57,7 @@
     {% endif %}
 
     <script type="text/javascript">
+        var map;
         $(function () {
             var prj = {
                 internalProjection: new OpenLayers.Projection('EPSG:900913'),
@@ -66,21 +67,25 @@
             var wkt = new OpenLayers.Format.WKT(prj);
             var json = new OpenLayers.Format.GeoJSON();
             var bounds = [];
-            var layers = [new OpenLayers.Layer.Google("Google", {type: google.maps.MapTypeId.HYBRID, numZoomLevels: 20})];
+            var layers = []; 
+            var isBaseLayer = true;
+            if({{page.application.default_base_map }} === 1) { layers.push(new OpenLayers.Layer.Google("Google", {type: google.maps.MapTypeId.HYBRID, numZoomLevels: 20})); }
             {% for p in page.application.renderedlayers.all %}
                 layers.push(new OpenLayers.Layer.WMS('{{ p.renderedlayer.title }}', "/ga_resources/wms/", {
                     styles: "{{ p.renderedlayer.default_style.slug }}",
                     layers: "{{ p.renderedlayer.slug }}",
-                    transparent: true
+                    transparent: !isBaseLayer,
+                    isBaseLayer: isBaseLayer
                 }));
                 bounds.push(wkt.read("{{ p.data_resource.spatial_metadata.bounding_box.wkt }}").geometry.getBounds());
+                isBaseLayer = false;
             {% endfor %}
 
-            var map = new OpenLayers.Map({ div: 'map', projection: "EPSG:3857", layers: layers });
+            map = new OpenLayers.Map({ div: 'map', projection: "EPSG:3857", layers: layers });
             if(bounds.length) { map.zoomToExtent(bounds[0]); } else { map.zoomToMaxExtent(); }
         });
     </script>
-    {{ page.application.script_tags }}
+    {{ page.application.script_tags|safe }}
     {% if page.application.application_script %}
         <script type="text/javascript" src="{{ page.application.application_script.url }}"></script>
     {% endif %}

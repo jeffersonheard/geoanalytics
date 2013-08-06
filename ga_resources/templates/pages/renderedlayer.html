@@ -42,7 +42,7 @@
                 <li class="nav-header">Render layer with style</li>
                 {% for style in page.renderedlayer.styles.all %}
 
-                    <li><a href="{{ page.get_absolute_url }}/?style={{ style.slug }}">View layer
+                    <li><a href="{{ page.get_absolute_url }}?style={{ style.slug }}">View layer
                             as {{ style.title }} style</a>
                     </li>
                 {% endfor %}
@@ -84,6 +84,7 @@
                 {% else %}
                 styles: "{{ request.GET.style }}",
                 {% endif %}
+
                 layers: "{{ page.renderedlayer.slug }}",
                 transparent: true
             });

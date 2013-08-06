@@ -9,7 +9,7 @@ class Application(Page, RichText):
     OSM = 4
     BING_ROADS = 5
     BING_AERIAL = 6
-    NONE = -1
+    NONE = 10
 
     default_base_map = models.PositiveSmallIntegerField(choices=(
         (WMS, "Web Map Service"),
