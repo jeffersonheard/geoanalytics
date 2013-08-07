@@ -50,7 +50,7 @@ class PostGISDriver(Driver):
             if k in cfg:
                 conn[k] = cfg[k]
 
-        if cfg['use_django_dbms']:
+        if cfg.get('use_django_dbms', False):
             alias = cfg.get('django_dbms_alias', 'default')
             db = s.DATABASES[alias]
             conn['dbname'] = db['NAME']
@@ -70,10 +70,10 @@ class PostGISDriver(Driver):
             addcfg('port')
 
         addcfg('estimate_extent')
+        
         if 'sublayer' in kwargs:
-            table, geometry_field = cfg['tables']['sublayer']
-        else:
-            table, geometry_field = cfg['table']
+            conn['id'] = conn['name'] = kwargs['sublayer']
+        table, geometry_field = self._table(**kwargs)
 
         conn['table'] = table
         conn['geometry_field'] = geometry_field
@@ -115,19 +115,22 @@ class PostGISDriver(Driver):
         if os.path.exists(dataframe):
             os.unlink(dataframe)
 
-        for table, geom_field in [cfg['table']] + cfg.get('tables', []):
-            c = connection.cursor()
-            if table.strip().lower().startswith('select'):
-                c.execute("select AsText(st_extent(w.{geom_field})) from ({table}) as w".format(geom_field=geom_field, table=table))
+        for entry in [cfg['table']] + cfg.get('tables', {}).values():
+            if isinstance(entry, list):
+                table, geom_field = entry
+            elif entry.startswith('#'):
+                table, geom_field = self._table(sublayer=entry[1:])
             else:
-                c.execute("select AsText(st_extent(w.{geom_field})) from {table} as w".format(geom_field=geom_field,
-                                                                                                table=table))
+                table = entry
+                geom_field = 'geometry'
+            c = connection.cursor()
+            c.execute("select AsText(st_extent({geom_field})) from {table}".format(geom_field=geom_field, table=table))
 
             xmin0, ymin0, xmax0, ymax0 = GEOSGeometry(c.fetchone()[0]).extent
             xmin = xmin0 if xmin0 < xmin else xmin
             ymin = ymin0 if ymin0 < ymin else ymin
-            xmax = xmax0 if xmax0 < xmax else xmax
-            xmax = xmax0 if xmax0 < xmax else xmax
+            xmax = xmax0 if xmax0 > xmax else xmax
+            ymax = ymax0 if ymax0 > ymax else ymax
 
         crs = osr.SpatialReference()
         crs.ImportFromEPSG(cfg['srid'])
@@ -138,6 +141,9 @@ class PostGISDriver(Driver):
         crx = osr.CoordinateTransformation(crs, e4326)
         x04326, y04326, _ = crx.TransformPoint(xmin, ymin)
         x14326, y14326, _ = crx.TransformPoint(xmax, ymax)
+
+        print xmin, xmax, ymin, ymax
+        print x04326, y04326, x14326, y14326
         self.resource.spatial_metadata.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
         self.resource.spatial_metadata.native_bounding_box = Polygon.from_bbox((xmin, ymin, xmax, ymax))
         self.resource.spatial_metadata.three_d = False
@@ -148,9 +154,21 @@ class PostGISDriver(Driver):
     def _table(self, **kwargs):
         cfg = self.resource.driver_config
         if 'sublayer' in kwargs:
-            table, geometry_field = cfg['tables'][kwargs['sublayer']]
+            entry = cfg['tables'][kwargs['sublayer']]
+            if isinstance(entry, list):
+               table, geometry_field = entry
+            else:
+               table = entry
+               geometry_field = 'geometry'
         else:
-            table, geometry_field = cfg['table']
+            entry = cfg['table']
+            if isinstance(entry, list):
+               table, geometry_field = entry
+            elif entry.startswith("#"):
+               return self._table(sublayer=entry[1:])
+            else:
+               table = entry
+               geometry_field = 'geometry'
 
         return table, geometry_field
 
@@ -173,10 +191,8 @@ class PostGISDriver(Driver):
             )
 
         cursor = self._cursor(**kwargs)
-        if table.strip().lower().startswith('select'):
-            table = '(' + table + ")"
 
-        cursor.execute("SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field})".format(
+        cursor.execute("SELECT * FROM {table} WHERE ST_Intersects({geometry}, {geometry_field})".format(
             geometry = geometry,
             table = table,
             geometry_field = geometry_field
@@ -294,7 +310,7 @@ class PostGISDriver(Driver):
 
             cursor = self._cursor(**kwargs)
 
-            q = "SELECT AsBinary({geometry_column}), * FROM ({table}) AS w WHERE "
+            q = "SELECT ST_AsHEXEWKB({geometry_column}), * FROM ({table}) AS w WHERE "
             addand = False
             if 'bbox' in lyr:
                 q += "ST_Intersects(GeomFromText('BBOX({xmin} {ymin} {xax} {ymax})'), {geometry_column})"
@@ -350,13 +366,14 @@ class PostGISDriver(Driver):
             return self._df
         else:
             table, geometry_column = self._table(**kwargs)
-            query = "SELECT AsBinary({geometry_column}), * FROM {table}".format(table=table, geometry_column=geometry_column)
+            query = "SELECT ST_AsHEXEWKB({geometry_column}), * FROM {table}".format(table=table, geometry_column=geometry_column)
+            print query
             cursor = self._cursor(**kwargs)
             cursor.execute(query)
             names = [c.name for c in cursor.description]
             throwaway_ix = names[1:].index(geometry_column) + 1
             records = []
-            for record in cursor:
+            for record in cursor.fetchall():
                 records.append({name: value for i, (name, value) in enumerate(zip(names, record)) if i != throwaway_ix})
                 records[-1]['geometry'] = wkb.loads(str(records[-1]['asbinary']))
                 del records[-1]['asbinary']

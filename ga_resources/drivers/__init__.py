@@ -237,8 +237,8 @@ class Driver(object):
 
 def compile_layer(rl, layer_id, srs, css_classes, **parameters):
     return {
-        "id" : re.sub('/', '_', layer_id),
-        "name" : re.sub('/', '_', layer_id),
+        "id" : parameters['id'] if 'id' in parameters else re.sub('/', '_', layer_id),
+        "name" : parameters['name'] if 'name' in parameters else re.sub('/', '_', layer_id),
         "class" : ' '.join(rl.default_class if 'default' else cls for cls in css_classes).strip(),
         "srs" : srs if isinstance(srs, basestring) else srs.ExportToProj4(),
         "Datasource" : parameters
@@ -274,6 +274,7 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
     if not os.path.exists(cache_path):
         os.makedirs(cache_path)  # just in case it's not there yet.
 
+    # add the prefix into the Redis database to make sure we know how to clean the cache out if the resource is modified
     cached_filename = os.path.join(cache_path, cache_entry_basename)
     for style in styles:
         s.WMS_CACHE_DB.sadd(style, cached_filename)
@@ -282,6 +283,8 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
 
     layer_specs = []
     for layer in layers:
+        if "#" in layer:
+            layer, kwargs['sublayer'] = layer.split("#") 
         rendered_layer = m.RenderedLayer.objects.get(slug=layer)
         driver = rendered_layer.data_resource.driver_instance
         layer_spec = driver.ready_data_resource(**kwargs)

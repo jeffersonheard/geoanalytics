@@ -17,8 +17,6 @@ from .models import DataResource, Style, SpatialMetadata
 
 
 def dataresource_pre_save(sender, instance, *args, **kwargs):
-    print instance.spatial_metadata
-
     if 'created' in kwargs and kwargs['created']:
         instance.last_refresh = instance.last_refresh or datetime.datetime.utcnow().replace(tzinfo=utc)
         if instance.refresh_every:
