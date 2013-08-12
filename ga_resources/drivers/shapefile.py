@@ -82,7 +82,7 @@ class ShapefileDriver(Driver):
         projection_found = False
         for name in archive.namelist():
             xtn = name.split('.')[-1].lower()
-            if xtn in {'shp', 'shx', 'dbf', 'prj'}:
+            if xtn in {'shp', 'shx', 'dbf', 'prj'} and "__MACOSX" not in name:
                 projection_found = projection_found or xtn == 'prj'
                 with open(self.cached_basename + '.' + xtn, 'wb') as fout:
                     with archive.open(name) as fin:
