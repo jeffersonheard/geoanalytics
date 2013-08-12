@@ -144,22 +144,36 @@ class Driver(object):
         filename = os.path.split(self.resource.slug)[-1]
         return os.path.join(self.cache_path, filename + '.' + xtn)
 
-    def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
+    def get_data_for_point(self, wherex, wherey, srs, fuzziness=30, **kwargs):
         _, nativesrs, result = self.ready_data_resource(**kwargs)
 
         s_srs = osr.SpatialReference()
-        t_srs = osr.SpatialReference()
+        t_srs = nativesrs
 
         if srs.lower().startswith('epsg'):
             s_srs.ImportFromEPSG(int(srs.split(':')[-1]))
         else:
             s_srs.ImportFromProj4(srs.encode('ascii'))
 
-        t_srs.ImportFromProj4(nativesrs.encode('ascii'))
         crx = osr.CoordinateTransformation(s_srs, t_srs)
         x1, y1, _ = crx.TransformPoint(wherex, wherey)
+        
+        # transform wherex and wherey to 3857 and then add $fuzziness meters to them
+        # transform the fuzzy coords to $nativesrs
+        # substract fuzzy coords from x1 and y1 to get the fuzziness needed in the native coordinate space
+        epsilon = 0
+        if fuzziness > 0:
+           meters = osr.SpatialReference()
+           meters.ImportFromEPSG(3857) # use web mercator for meters
+           nat2met = osr.CoordinateTransformation(s_srs, meters) # switch from the input srs to the metric one
+           met2nat = osr.CoordinateTransformation(meters, t_srs) # switch from the metric srs to the native one
+           mx, my, _ = nat2met.TransformPoint(wherex, wherey) # calculate the input coordinates in meters
+           fx = mx+fuzziness # add metric fuzziness to the x coordinate only to get a radius
+           fy = my 
+           fx, fy, _ = met2nat.TransformPoint(fx, fy)
+           epsilon = fx - x1 # the geometry should be buffered by this much
 
-        return result, x1, y1
+        return result, x1, y1, epsilon
 
     def as_dataframe(self, **kwargs):
         raise NotImplementedError("This driver does not support dataframes")
