@@ -10,4 +10,5 @@ urlpatterns = patterns('',
     url(r'^download/(?P<slug>.*)$', views.download_file),
     url(r'^createpage/', views.create_page),
     url(r'^deletepage/', views.delete_page),
+    url(r'^extent/(?P<slug>.*)/', views.extent),
 )

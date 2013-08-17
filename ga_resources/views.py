@@ -42,6 +42,25 @@ def download_file(request, *args, **kwargs):
     else:
         return HttpResponseNotFound()
 
+def extent(request, *args, **kwargs):
+
+    res = DataResource.objects.get(slug=kwargs['slug'])
+    ret = res.spatial_metadata.bounding_box
+    ret.transform(int(request.REQUEST.get('srid', 3857)))
+    ret = ret.extent
+
+    callback = None
+    if 'jsonCallback' in request.REQUEST:
+        callback = request.REQUEST['jsonCallback']
+    elif 'callback' in request.REQUEST:
+        callback = request.REQUEST['callback']
+
+    if callback:
+        return HttpResponse(callback + '(' + json.dumps(ret) + ")", mimetype='text/plain')
+    else:
+        return HttpResponse(json.dumps(ret), mimetype='application/json')
+
+
 def search_catalog(request, *args, **kwargs):
     """A spatial search for the DataResource catalog. In the future, this will be more thorough, but right now it looks
     for a filter parameter in the request, and inside that a JSON payload including a bbox four-tuple of minx, maxx
