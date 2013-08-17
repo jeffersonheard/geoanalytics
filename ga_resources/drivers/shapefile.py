@@ -82,7 +82,7 @@ class ShapefileDriver(Driver):
         projection_found = False
         for name in archive.namelist():
             xtn = name.split('.')[-1].lower()
-            if xtn in {'shp', 'shx', 'dbf', 'prj'}:
+            if xtn in {'shp', 'shx', 'dbf', 'prj'} and "__MACOSX" not in name:
                 projection_found = projection_found or xtn == 'prj'
                 with open(self.cached_basename + '.' + xtn, 'wb') as fout:
                     with archive.open(name) as fin:
@@ -123,16 +123,17 @@ class ShapefileDriver(Driver):
         lyr = ds.GetLayerByIndex(0) if 'layer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
         return [(field.name, field.GetTypeName(), field.width) for field in lyr.schema]
 
-    def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
-        result, x1, y1 = super(ShapefileDriver, self).get_data_for_point(wherex, wherey, srs, fuzziness, **kwargs)
+    def get_data_for_point(self, wherex, wherey, srs, **kwargs):
+        result, x1, y1, epsilon = super(ShapefileDriver, self).get_data_for_point(wherex, wherey, srs, **kwargs)
         ds = ogr.Open(result['file'])
         lyr = ds.GetLayerByIndex(0) if 'sublayer' not in kwargs else ds.GetLayerByName(kwargs['sublayer'])
 
-        if fuzziness==0:
+        if epsilon==0:
             lyr.SetSpatialFilter(ogr.CreateGeometryFromWkt("POINT({x1} {y1})".format(**locals())))
         else:
             from django.contrib.gis import geos
-            wkt = geos.Point(wherex,wherey).buffer(fuzziness).wkt
+            wkt = geos.Point(x1,y1).buffer(epsilon).wkt
+            print wkt
             lyr.SetSpatialFilter(ogr.CreateGeometryFromWkt(wkt))
         return [f.items() for f in lyr]
 

@@ -172,8 +172,8 @@ class PostGISDriver(Driver):
 
         return table, geometry_field
 
-    def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
-        result, x1, y1 = super(PostGISDriver, self).get_data_for_point(wherex, wherey, srs, fuzziness, **kwargs)
+    def get_data_for_point(self, wherex, wherey, srs, **kwargs):
+        result, x1, y1, fuzziness = super(PostGISDriver, self).get_data_for_point(wherex, wherey, srs, fuzziness, **kwargs)
         cfg = self.resource.driver_config
         table, geometry_field = self._table(**kwargs)
 
