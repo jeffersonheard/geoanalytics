@@ -38,9 +38,26 @@
     </div>
     {% endif %}
     <hr>
+
+    <div class="row-fluid">
+    {% if page.application.left_sidebar_html and page.application.left_sidebar_columns %}
+        {% autoescape off %}
+        <div class="span{{ page.application.left_sidebar_columns }}">{{ page.application.left_sidebar_html }}</div>
+        {% endautoescape %}
+    {% endif %}
+
+    <div class="span{{ page.application.remainder }}">
     {% editable page.application.content %}
         {{ page.application.content|richtext_filter|safe }}
     {% endeditable %}
+    </div>
+
+    {% if page.application.right_sidebar_html and page.application.right_sidebar_columns %}
+        {% autoescape off %}
+            <div class="span{{ page.application.right_sidebar_columns }}">{{ page.application.right_sidebar_html }}</div>
+        {% endautoescape %}
+    {% endif %}
+    </div>
 
 
 
@@ -81,7 +98,7 @@
                 isBaseLayer = false;
             {% endfor %}
 
-            map = new OpenLayers.Map({ div: 'map', projection: "EPSG:3857", layers: layers });
+            map = new OpenLayers.Map({ div: 'map', projection: "EPSG:3857", layers: layers, numZoomLevels: 28 });
             if(bounds.length) { map.zoomToExtent(bounds[0]); } else { map.zoomToMaxExtent(); }
         });
     </script>
