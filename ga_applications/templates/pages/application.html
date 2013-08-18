@@ -5,7 +5,6 @@
 
 {% block main %}{{ block.super }}
 
-
     <div class="row-fluid">
         {% autoescape off %}
             {{ page.application.header_html }}
@@ -98,7 +97,13 @@
                 isBaseLayer = false;
             {% endfor %}
 
-            map = new OpenLayers.Map({ div: 'map', projection: "EPSG:3857", layers: layers, numZoomLevels: 28 });
+            map = new OpenLayers.Map({
+                div: 'map',
+                projection: new OpenLayers.Projection("EPSG:3857"),
+                displayProjection: new OpenLayers.Projection("EPSG:4326"),
+                layers: layers,
+                numZoomLevels: 28
+            });
             if(bounds.length) { map.zoomToExtent(bounds[0]); } else { map.zoomToMaxExtent(); }
         });
     </script>
@@ -121,7 +126,7 @@
       <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
     <link rel="stylesheet" href="{{ STATIC_URL }}bootstrap/css/font-awesome.css">
-    {{ page.application.link_tags }}
+    {{ page.application.link_tags|safe }}
     {% if page.application.application_css %}
         <link rel="stylesheet" href="{{ page.application.application_css.url }}"/>
     {% endif %}
