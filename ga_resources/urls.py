@@ -11,4 +11,7 @@ urlpatterns = patterns('',
     url(r'^createpage/', views.create_page),
     url(r'^deletepage/', views.delete_page),
     url(r'^extent/(?P<slug>.*)/', views.extent),
+    url(r'^kmz-features/(?P<slug>.*)/', views.kmz_features),
+    url(r'^kmz-resource/(?P<slug>.*):(?P<filename>.*)/?', views.kmz_resource),
+    url(r'^kmz-coverages/(?P<slug>.*)/', views.kmz_ground_overlays_json),
 )

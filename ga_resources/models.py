@@ -44,6 +44,7 @@ class CatalogPage(Page):
 
         return p
 
+
 class SemanticRelationship(models.Model):
     """A class to assert a relationship triple between two pages"""
     subject = models.ForeignKey(Page, related_name='subject')
@@ -75,6 +76,9 @@ class SpatialMetadata(models.Model):
     native_srs = models.TextField(null=True, blank=True)
 
     objects = models.GeoManager()
+
+    def __unicode__(self):
+        return u"Metadata for " + self.dataresource.slug
 
 class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
