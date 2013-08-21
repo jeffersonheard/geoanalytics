@@ -2,7 +2,6 @@ BeautifulSoup==3.2.1
 Cython==0.19.1
 Django==1.5.1
 Fabric==1.5.0
-GDAL==1.8.1
 Jinja2==2.6
 Mezzanine==1.4.9
 Orange==2.6
