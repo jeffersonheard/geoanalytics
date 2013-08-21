@@ -38,9 +38,10 @@ def refresh_resources():
     """
     now = datetime.datetime.utcnow().replace(tzinfo=utc)
     res = DataResource.objects.filter(next_refresh__lte=now)
-    task_grp = group([refresh_resource.s(r.pk) for r in res])
-    task_grp.apply_async().get()
-
+    task_grp = [refresh_resource.s(r.pk) for r in res]
+    if task_grp:
+       task_grp = group(task_grp)
+       task_grp.apply_async().get()
 
 @task(ignore_result=True)
 def data_resource_compute_fields(pk):
