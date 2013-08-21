@@ -7,7 +7,7 @@ from tastypie.authorization import Authorization
 from ga_resources import models
 from mezzanine.pages.models import Page
 from django.contrib.auth import models as auth
-
+from django.conf.urls import url
 
 class AbstractPageResource(ModelResource):
     """Abstract class that provides sensible defaults for creating new pages via the RESTful API. e.g. unless there's
@@ -58,6 +58,12 @@ class CatalogPage(AbstractPageResource):
         queryset = models.CatalogPage.objects.all()
         resource_name = 'catalog'
         allowed_methods = ['get']
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
 
 class RelatedResource(AbstractPageResource):
     class Meta(BaseMeta):
@@ -65,6 +71,12 @@ class RelatedResource(AbstractPageResource):
         authentication = ApiKeyAuthentication()
         queryset = models.RelatedResource.objects.all()
         resource_name = "related"
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
 
 class SpatialMetadata(ModelResource):
     class Meta:
@@ -73,12 +85,24 @@ class SpatialMetadata(ModelResource):
         allowed_methods = ['get']
         queryset = models.SpatialMetadata.objects.all()
         resource_name = 'spatial_metadata'
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
 
 class Page(AbstractPageResource):
    class Meta:
         queryset = Page.objects.all()
         resource_name = 'page'
         allowed_methods = ['get']
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
  
 
 class DataResource(AbstractPageResource):
@@ -89,12 +113,24 @@ class DataResource(AbstractPageResource):
         queryset = models.DataResource.objects.all()
         resource_name = 'data'
         fields = ['title','status','content','resource_file','resource_url','resource_irods_file','kind','driver','parent']
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
 
 
 class ResourceGroup(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.ResourceGroup.objects.all()
         resource_name = "resource_group"
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
 
 resources = Api()
 resources.register(User())
@@ -111,6 +147,12 @@ class Style(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.Style.objects.all()
         resource_name = "style"
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
 
 styles = Api()
 styles.register(Style())
@@ -125,6 +167,12 @@ class RenderedLayer(AbstractPageResource):
     class Meta(BaseMeta):
         queryset = models.RenderedLayer.objects.all()
         resource_name = 'rendered_layer'
+        detail_uri_name = "slug"
+    
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
+        ]
 
 
 layers = Api()
