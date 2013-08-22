@@ -74,6 +74,7 @@
           l.setVisibility(tf);
         }
       }
+      this.kml.setVisibility(tf);
       return this.visibility = tf;
     };
 
@@ -86,6 +87,7 @@
           l.setOpacity(tf);
         }
       }
+      this.kml.setVisibility(tf);
       return this.opacity = tf;
     };
 
