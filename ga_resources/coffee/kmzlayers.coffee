@@ -12,7 +12,6 @@ imageLayer = (mp, lyr) ->
   sw = sw.transform src, dst
   ne = ne.transform src, dst
 
-
   bounds = new OpenLayers.Bounds(sw.x, sw.y, ne.x, ne.y)
 
   new OpenLayers.Layer.Image(
@@ -52,10 +51,12 @@ class KmzLayerSet
 
   setVisibility: (tf) ->
     if @layers.length then (l.setVisibility tf for l in @layers)
+    @kml.setVisibility tf
     @visibility = tf
 
   setOpacity: (tf) ->
     if @layers.length then (l.setOpacity tf for l in @layers)
+    @kml.setVisibility tf
     @opacity = tf
 
 

@@ -89,4 +89,7 @@ class KmzDriver(Driver):
 
         return ground_overlays
 
+    def summary(self, *args, **kwargs):
+        return []
+
 driver = KmzDriver
