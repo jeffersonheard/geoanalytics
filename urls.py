@@ -23,7 +23,8 @@ urlpatterns = patterns("",
     #url('^ga_irods/', include('ga_irods.urls')),
     #url('^ga_ows/', include('ga_ows.urls')),
     #url('^flower/', include('flower.urls')),
-    #url('^cera/', include('cera.urls')),
+    url('^cera/', include('cera.urls')),
+    url('^sesar_mobile/', include('sesar_mobile.urls')),
 
     # We don't want to presume how your homepage works, so here are a
     # few patterns you can use to set it up.
