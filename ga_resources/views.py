@@ -1,8 +1,9 @@
+from zipfile import ZipFile
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 from ga_ows.views import wfs, wms
 from ga_resources import models, drivers
 import json
-from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
+from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound, Http404
 from ga_resources.drivers import shapefile
 from ga_resources.models import DataResource
 from osgeo import osr, ogr
@@ -11,6 +12,45 @@ from mezzanine.pages.models import Page
 from mezzanine.utils.urls import admin_url
 from django.shortcuts import get_object_or_404
 from hashlib import md5
+
+def kmz_resource(request, *args, **kwargs):
+    slug = kwargs['slug']
+    ff = kwargs['filename']
+    ds = get_object_or_404(DataResource, slug=slug)
+
+    if ds.driver != 'ga_resources.drivers.kmz':
+        raise Http404(slug)
+    else:
+        _, _, cfg = ds.driver_instance.ready_data_resource(*args, **kwargs)
+
+        try:
+            return HttpResponse(ds.driver_instance.open_stream(ff), mimetype='application/x-binary')
+        except Exception, e:
+            raise Http404(str(e))
+
+def kmz_features(request, *args, **kwargs):
+    slug = kwargs['slug']
+    ds = get_object_or_404(DataResource, slug=slug)
+
+    if ds.driver != 'ga_resources.drivers.kmz':
+        raise Http404(slug)
+    else:
+        _, _, cfg = ds.driver_instance.ready_data_resource(*args, **kwargs)
+        return HttpResponse(ds.driver_instance.features(), mimetype='application/vnd.google-earth.kml+xml')
+
+def kmz_ground_overlays_json(request, *args, **kwargs):
+    slug = kwargs['slug']
+    ds = get_object_or_404(DataResource, slug=slug)
+
+    if ds.driver != 'ga_resources.drivers.kmz':
+        raise Http404(slug)
+    else:
+        _, _, cfg = ds.driver_instance.ready_data_resource(*args, **kwargs)
+        ground_overlays = ds.driver_instance.ground_overlays()
+        for i, g in enumerate(ground_overlays):
+            ground_overlays[i]['href'] = '/ga_resources/kmz-resource/{slug}:{href}'.format(slug=slug, href=ground_overlays[i]['href'])
+        return HttpResponse(json.dumps(ground_overlays, indent=4), mimetype='application/javascript')
+
 
 def create_page(request):
     models = request.GET['module']

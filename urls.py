@@ -17,7 +17,6 @@ urlpatterns = patterns("",
     # admin interface, which would be marginally more secure.
     ("^admin/", include(admin.site.urls)),
 
-    url("^ga_bigboard/", include('ga_bigboard.urls')),
     url('^ga_resources/', include('ga_resources.urls')),
     url('^ga_interactive/', include('ga_interactive.urls')),
     #url('^ga_irods/', include('ga_irods.urls')),

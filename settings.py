@@ -168,7 +168,7 @@ DATABASES = {
         # Add "postgresql_psycopg2", "mysql", "sqlite3" or "oracle".
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         # DB name or path to database file if using sqlite3.
-        "NAME": "rhessysweb",
+        "NAME": "geoanalytics",
         # Not used with sqlite3.
         "USER": "geoanalytics",
         # Not used with sqlite3.
@@ -230,7 +230,7 @@ ROOT_URLCONF = "%s.urls" % PROJECT_DIRNAME
 # Always use forward slashes, even on Windows.
 # Don't forget to use absolute paths, not relative paths.
 TEMPLATE_DIRS = (os.path.join(PROJECT_ROOT, "templates"),
-    "/home/th/ga/lib/python2.7/site-packages/django/contrib/gis/templates"
+    "/opt/django/ga/lib/python2.7/site-packages/django/contrib/gis/templates"
 )
 
 
@@ -261,12 +261,14 @@ INSTALLED_APPS = (
     "mezzanine.mobile",
     
     "tastypie",
+    "djcelery",
     "ga_applications",
     "ga_home",
     "ga_ows",
     "ga_resources",
     "ga_irods",
     "ga_interactive",
+    "ga_home"
 )
 
 # List of processors used by RequestContext to populate the context.
@@ -319,7 +321,7 @@ PACKAGE_NAME_GRAPPELLI = "grappelli_safe"
 OPTIONAL_APPS = (
     "debug_toolbar",
     "django_extensions",
-    "compressor",
+    # "compressor",
     PACKAGE_NAME_FILEBROWSER,
     PACKAGE_NAME_GRAPPELLI,
 )
