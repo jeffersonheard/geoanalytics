@@ -93,7 +93,17 @@ class DataResource(Page, RichText):
     metadata_url = models.URLField(null=True, blank=True)
     metadata_xml = models.TextField(null=True, blank=True)
     spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
-    driver = models.CharField(default='ga_resources.drivers.shapefile', max_length=255, null=False, blank=False)
+    driver = models.CharField(
+        default='ga_resources.drivers.shapefile',
+        max_length=255,
+        null=False,
+        blank=False,
+        choices=getattr(s, 'INSTALLED_DATARESOURCE_DRIVERS', (
+            ('ga_resources.drivers.shapefile', 'Shapefile'),
+            ('ga_resources.drivers.geotiff', 'GeoTIFF'),
+            ('ga_resources.drivers.postgis', 'PostGIS'),
+            ('ga_resources.drivers.kmz', 'Google Earth KMZ'),
+        )))
     big = models.BooleanField(default=False, help_text='Set this to be true if the dataset is more than 100MB') # causes certain drivers to optimize for datasets larger than memory
 
     class Meta:
