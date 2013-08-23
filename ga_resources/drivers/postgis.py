@@ -173,7 +173,7 @@ class PostGISDriver(Driver):
         return table, geometry_field
 
     def get_data_for_point(self, wherex, wherey, srs, **kwargs):
-        result, x1, y1, fuzziness = super(PostGISDriver, self).get_data_for_point(wherex, wherey, srs, fuzziness, **kwargs)
+        result, x1, y1, fuzziness = super(PostGISDriver, self).get_data_for_point(wherex, wherey, srs, **kwargs)
         cfg = self.resource.driver_config
         table, geometry_field = self._table(**kwargs)
 
@@ -187,7 +187,8 @@ class PostGISDriver(Driver):
             geometry = "ST_Buffer(GeomFromText('POINT({x} {y})', {srid}), {fuzziness})".format(
                 x = x1,
                 y = y1,
-                srid = cfg['srid']
+                srid = cfg['srid'],
+                fuzziness = fuzziness
             )
 
         cursor = self._cursor(**kwargs)
@@ -200,7 +201,7 @@ class PostGISDriver(Driver):
         rows = [list(r) for r in cursor.fetchall()]
         keys = [c.name for c in cursor.description]
 
-        return [zip(keys, r) for r in rows]
+        return [dict(zip(keys, r)) for r in rows]
 
     def attrquery(self, key, value):
         if '__' not in key:
@@ -310,10 +311,11 @@ class PostGISDriver(Driver):
 
             cursor = self._cursor(**kwargs)
 
-            q = "SELECT ST_AsHEXEWKB({geometry_column}), * FROM ({table}) AS w WHERE "
+
+            q = "SELECT AsBinary({geometry_column}), * FROM {table} AS w WHERE "
             addand = False
             if 'bbox' in lyr:
-                q += "ST_Intersects(GeomFromText('BBOX({xmin} {ymin} {xax} {ymax})'), {geometry_column})"
+                q += "{geometry_column} && ST_SetSRID(ST_MakeBox2D(ST_Point({xmin}, {ymin}), ST_Point({xmax}, {ymax})), {srid}) "
                 addand = True
 
             if 'boundary' in lyr:
@@ -336,7 +338,8 @@ class PostGISDriver(Driver):
                 boundary = cfg.get('boundary', None),
                 geometry_column = geometry_column,
                 table = table,
-                **lyr.get('bbox',[None,None,None,None])
+                srid=cfg.get('srid',4326),
+                **dict(zip(('xmin','ymin','xmax','ymax'), lyr.get('bbox',(0,0,0,0))))
             ))
             for i in range(start):
                 cursor.fetchone()
@@ -346,12 +349,10 @@ class PostGISDriver(Driver):
             records = []
             for record in cursor:
                 records.append({name: value for i, (name, value) in enumerate(zip(names, record)) if i != throwaway_ix})
-                records[-1]['geometry'] = wkb.loads(record['asbinary'])
+                records[-1]['geometry'] = wkb.loads(str(records[-1]['asbinary']))
+                del records[-1]['asbinary']
 
-            df = DataFrame.from_records(
-                data=records,
-                index='fid'
-            )
+            df = DataFrame.from_records(data=records)
 
             if 'sort_by' in kwargs:
                 df = df.sort_index(by=kwargs['sort_by'])
@@ -366,7 +367,7 @@ class PostGISDriver(Driver):
             return self._df
         else:
             table, geometry_column = self._table(**kwargs)
-            query = "SELECT ST_AsHEXEWKB({geometry_column}), * FROM {table}".format(table=table, geometry_column=geometry_column)
+            query = "SELECT AsBinary({geometry_column}), * FROM {table}".format(table=table, geometry_column=geometry_column)
             print query
             cursor = self._cursor(**kwargs)
             cursor.execute(query)

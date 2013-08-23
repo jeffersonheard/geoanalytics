@@ -172,6 +172,19 @@ class Driver(object):
            fy = my 
            fx, fy, _ = met2nat.TransformPoint(fx, fy)
            epsilon = fx - x1 # the geometry should be buffered by this much
+        elif 'bbox' in kwargs and 'width' in kwargs and 'height' in kwargs:
+           # use the bounding box to calculate a radius of 8 pixels around the input point
+           minx, miny, maxx, maxy = kwargs['bbox']
+           width = int(kwargs['width']) # the tile width in pixels
+           height = int(kwargs['height']) # the tile height in pixels
+           dy = (maxy-miny)/height # the height delta in native coordinate units between pixels
+           dx = (maxx-minx)/width # the width delta in native coordinate units between pixels
+           x2, y2, _ = crx.TransformPoint(wherex+dx*8, wherey) # return a point 8 pixels to the right of the source point in native coordinate units
+           epsilon = x2 - x1 # the geometry should be buffered by this much
+           
+           
+        else:
+           print json.dumps(kwargs, indent=4)
 
         return result, x1, y1, epsilon
 

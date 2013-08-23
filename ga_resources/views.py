@@ -105,7 +105,7 @@ class WMSAdapter(wms.WMSAdapterBase):
         """use the driver to render a tile"""
         return open(drivers.render(kwargs['format'], width, height, bbox, srs, styles, layers, **kwargs))
 
-    def get_feature_info(self, wherex, wherey, layers, callback, format, feature_count, srs, filter, fuzziness=30, **kwargs): # fuzziness of 30 meters by default
+    def get_feature_info(self, wherex, wherey, layers, callback, format, feature_count, srs, filter, fuzziness=0, **kwargs): # fuzziness of 30 meters by default
         """use the driver to get feature info"""
 
         if srs.lower().startswith('epsg'):
