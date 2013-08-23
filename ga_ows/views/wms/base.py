@@ -540,7 +540,10 @@ class GetFeatureInfoMixin(common.OWSMixinBase):
                 for feature in info[layer]:
                     fields = etree.SubElement(elt, "FIELDS")
                     for k, v in feature.items():
-                        fields.set(k, unicode(v))
+                        try:
+                            fields.set(k, unicode(v))
+                        except:
+                            fields.set(k, '')
             
             return HttpResponse(etree.tostring(elt, xml_declaration=True), mimetype='application/vnd.ogc.wms_xml')
             #raise common.OWSException.at('GetFeatureInfo', "Feature info format not supported")
