@@ -103,6 +103,7 @@ class DataResource(Page, RichText):
             ('ga_resources.drivers.geotiff', 'GeoTIFF'),
             ('ga_resources.drivers.postgis', 'PostGIS'),
             ('ga_resources.drivers.kmz', 'Google Earth KMZ'),
+            ('ga_resources.drivers.ogr', 'OGR DataSource'),
         )))
     big = models.BooleanField(default=False, help_text='Set this to be true if the dataset is more than 100MB') # causes certain drivers to optimize for datasets larger than memory
 
