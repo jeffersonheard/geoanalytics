@@ -93,7 +93,7 @@
 {% endblock %}
 
 {% block extra_js %}
-    <script src="http://openlayers.org/dev/OpenLayers.js"></script>
+    <script src="{{STATIC_URL}}ol/OpenLayers.debug.js"></script>
     <script type="text/javascript">
         $(function() {
             var in_options = {

@@ -78,7 +78,7 @@ class SpatialMetadata(models.Model):
     objects = models.GeoManager()
 
     def __unicode__(self):
-        return u"Metadata for " + self.dataresource.slug
+        return u"Metadata for " # + self.dataresource.slug
 
 class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
