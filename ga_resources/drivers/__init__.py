@@ -324,6 +324,8 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
             os.unlink(cached_filename + ".lock")
         except sh.ErrorReturnCode_1, e:
             raise RuntimeError(str(e.stderr))
+        except:
+            pass
 
     return cached_filename
 
