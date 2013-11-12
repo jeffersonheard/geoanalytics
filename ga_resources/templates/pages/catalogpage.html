@@ -10,8 +10,9 @@
                 <h2><a href="/{{ page.parent.slug }}">{{ page.parent.title }}</a></h2>
                 <ul class='nav nav-list'>
                     {% for child in page.catalogpage.siblings %}
-                        <li {% ifequal child page %}class='active'{% endifequal %}><a
-                                href="/{{ child.slug }}">{{ child.title }}</a></li>
+                        <li {% ifequal child page %}class='active'{% endifequal %}>
+                            <a href="/{{ child.slug }}">{{ child.title }}</a>
+                        </li>
                     {% endfor %}
                 </ul>
             {% endif %}

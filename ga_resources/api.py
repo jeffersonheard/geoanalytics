@@ -1,7 +1,7 @@
 from tastypie.api import Api
 from tastypie.fields import ForeignKey, ManyToManyField, OneToOneField
 from tastypie.resources import ModelResource, ALL, ALL_WITH_RELATIONS
-from tastypie.authentication import ApiKeyAuthentication
+from tastypie.authentication import SessionAuthentication
 from tastypie.authorization import Authorization
 
 from ga_resources import models
@@ -31,14 +31,14 @@ class AbstractPageResource(ModelResource):
 class BaseMeta(object):
     allowed_methods = ['get', 'put', 'post', 'delete']
     authorization = Authorization()
-    authentication = ApiKeyAuthentication()
+    authentication = SessionAuthentication()
     filtering = { 'slug' : ALL, 'title' : ALL, 'parent' : ALL_WITH_RELATIONS }
 
 
 class Group(ModelResource):
     class Meta:
         authorization = Authorization()
-        authentication = ApiKeyAuthentication()
+        authentication = SessionAuthentication()
         allowed_methods = ['get']
         queryset = auth.Group.objects.all()
         resource_name = "group"
@@ -47,7 +47,7 @@ class Group(ModelResource):
 class User(ModelResource):
     class Meta:
         authorization = Authorization()
-        authentication = ApiKeyAuthentication()
+        authentication = SessionAuthentication()
         allowed_methods = ['get']
         queryset = auth.User.objects.all()
         resource_name = "user"
@@ -68,7 +68,7 @@ class CatalogPage(AbstractPageResource):
 class RelatedResource(AbstractPageResource):
     class Meta(BaseMeta):
         authorization = Authorization()
-        authentication = ApiKeyAuthentication()
+        authentication = SessionAuthentication()
         queryset = models.RelatedResource.objects.all()
         resource_name = "related"
         detail_uri_name = "slug"
@@ -81,7 +81,7 @@ class RelatedResource(AbstractPageResource):
 class SpatialMetadata(ModelResource):
     class Meta:
         authorization = Authorization()
-        authentication = ApiKeyAuthentication()
+        authentication = SessionAuthentication()
         allowed_methods = ['get']
         queryset = models.SpatialMetadata.objects.all()
         resource_name = 'spatial_metadata'

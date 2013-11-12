@@ -46,7 +46,10 @@ class Driver(object):
             if self.resource.resource_file:
                 if os.path.exists(cached_filename):
                     os.unlink(cached_filename)
-                os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
+                try:
+                    os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
+                except:
+                    pass
             elif self.resource.resource_url:
                 if self.resource.resource_url.startswith('ftp'):
                     result = urlopen(self.resource.resource_url).read()
