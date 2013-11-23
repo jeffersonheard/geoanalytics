@@ -1,5 +1,6 @@
 # from ga_ows.views import wms, wfs
 from uuid import uuid4
+from zipfile import ZipFile
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 import os
 from osgeo import osr
@@ -85,6 +86,49 @@ class SpatialiteDriver(Driver):
         ignores them"""
         
         super(SpatialiteDriver, self).compute_fields(**kwargs)
+
+        # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
+        # file
+        if self.src_ext.endswith('zip'):
+            archive = ZipFile(self.cached_basename + self.src_ext)
+            projection_found = False
+            for name in archive.namelist():
+                xtn = name.split('.')[-1].lower()
+                if xtn in {'shp', 'shx', 'dbf', 'prj'} and "__MACOSX" not in name:
+                    projection_found = projection_found or xtn == 'prj'
+                    with open(self.cached_basename + '.' + xtn, 'wb') as fout:
+                        with archive.open(name) as fin:
+                            chunk = fin.read(65536)
+                            while chunk:
+                                fout.write(chunk)
+                                chunk = fin.read(65536)
+
+            if not projection_found:
+                with open(self.cached_basename + '.prj', 'w') as f:
+                    srs = osr.SpatialReference()
+                    srs.ImportFromEPSG(4326)
+                    f.write(srs.ExportToWkt())
+
+            in_filename = self.get_filename('shp')
+            out_filename = self.get_filename('sqlite')
+            sh.ogr2ogr(
+                '-skipfailures',
+                '-t_srs', 'epsg:3857',
+                '-f', 'SQLite',
+                '-dsco', 'SPATIALITE=YES',
+                out_filename, in_filename
+            )
+        elif not self.src_ext.endswith('sqlite'):
+            in_filename = self.get_filename(self.src_ext)
+            out_filename = self.get_filename('sqlite')
+            sh.ogr2ogr(
+                '-skipfailures',
+                '-t_srs', 'epsg:3857',
+                '-f', 'SQLite',
+                '-dsco', 'SPATIALITE=YES',
+                out_filename, in_filename
+            )
+
         cfg = self.resource.driver_config
         connection = self._connection()
         table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry

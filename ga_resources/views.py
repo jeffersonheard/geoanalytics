@@ -179,30 +179,6 @@ class WMSAdapter(wms.WMSAdapterBase):
         return list(models.Style.objects.all())
 
     def get_layer_descriptions(self):
-        """
-        This should return a list of dictionaries.  Each dictionary should follow this format::
-            { ""name"" : layer_"name",
-              "title" : human_readable_title,
-              "srs" : spatial_reference_id,
-              "queryable" : whether or not GetFeatureInfo is supported for this layer,
-              "minx" : native_west_boundary,
-              "miny" : native_south_boundary,
-              "maxx" : native_east_boundary,
-              "maxy" : native_north_boundary,
-              "ll_minx" : west_boundary_epsg4326,
-              "ll_miny" : south_boundary_epsg4326,
-              "ll_maxx" : east_boundary_epsg4326,
-              "ll_maxy" : north_boundary_epsg4326,
-              "styles" : [list_of_style_descriptions]
-
-        Each style description in list_of_style_descriptions should follow this format::
-            { ""name"" : style_"name",
-              "title" : style_title,
-              "legend_width" : style_legend_width,
-              "legend_height" : style_legend_height,
-              "legend_url" : style_legend_url
-            }
-        """
         layers = models.RenderedLayer.objects.all()
         ret = []
         for layer in layers:
@@ -234,8 +210,6 @@ class WMSAdapter(wms.WMSAdapterBase):
 
 
     def get_service_boundaries(self):
-        """Just go ahead and return the world coordinates"""
-
         return {
           "minx" : -180.0,
           "miny" : -90.0,
@@ -352,3 +326,8 @@ class WFSAdapter(wfs.WFSAdapter):
 class WFS(wfs.WFS):
     adapter=WFSAdapter()
 
+def tms(request, layer, z, x, y, **kwargs):
+    from .drivers import MBTileCache
+    style = request.get('styles', None)
+    tms = MBTileCache(layer, style)
+    return HttpResponse(tms.fetch_tile(z,x,y), mimetype='image/png')

@@ -16,6 +16,7 @@ from django.conf import settings
 from ga_resources import predicates
 from ga_resources.models import SpatialMetadata
 import time
+import math
 
 from osgeo import osr
 
@@ -234,35 +235,20 @@ class Driver(object):
 
         return ctx
 
-#
-# See below.  I switched this to Carto, which requires JSON files instead of XML.
-#
-#def compile_layer(parent, layer_id, srs, **parameters):
-#    layer = etree.SubElement(parent, "Layer")
-#    layer.set("id", layer_id)
-#    layer.set("srs", srs)
-#    ds = etree.SubElement(layer, 'Datasource')
-#
-#    for name, value in parameters.items():
-#        p = etree.SubElement(ds, 'Parameter')
-#        p.set("name", name)
-#        p.text = value
-#    return layer
+def deg2num(lat_deg, lon_deg, zoom):
+    lat_rad = math.radians(lat_deg)
+    n = 2.0 ** zoom
+    xtile = int((lon_deg + 180.0) / 360.0 * n)
+    ytile = int((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
+    return (xtile, ytile)
 
-#def compile_mml(srs, stylesheets, *layers):
-#    mapfile = etree.Element('Map')
-#    mapfile.set("srs", srs)
-#    for stylesheet in stylesheets:
-#        # etree.SubElement(map, "Stylesheet").text = open(stylesheet).read()
-#        etree.SubElement(mapfile, "Stylesheet").text = stylesheet
-#    for layer_id, lsrs, parms in layers:
-#        compile_layer(mapfile, layer_id, lsrs, **parms)
-#    return mapfile
 
-#def compile_mapfile(name, srs, stylesheets, *layers):
-#    with open(name + ".mml", 'w') as mapfile:
-#        mapfile.write(etree.tostring(compile_mml(srs, stylesheets, *layers), pretty_print=True))
-#    sh.cascadenik(name + '.mml', name + '.xml')
+def num2deg(xtile, ytile, zoom):
+    n = 2.0 ** zoom
+    lon_deg = xtile / n * 360.0 - 180.0
+    lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
+    lat_deg = math.degrees(lat_rad)
+    return (lat_deg, lon_deg)
 
 
 def compile_layer(rl, layer_id, srs, css_classes, **parameters):
@@ -363,3 +349,76 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
         mapnik.render_to_file(m, filename, fmt)
 
     return filename
+
+
+from sqlite3 import dbapi2 as db
+
+class MBTileCache(object):
+    def __init__(self, layers, styles, **kwargs):
+        self.srs = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null"
+        self.name = prepare_wms(layers, self.srs, styles, **kwargs)
+        self.cachename = self.name + '.mbtiles'
+
+        self.layers = layers
+        self.styles = styles
+        self.kwargs = kwargs
+
+        if os.path.exists(self.cachename):
+            conn = db.connect(self.cachename)
+        else:
+            conn = db.connect(self.cachename)
+            cursor = conn.cursor()
+            cursor.executescript("""
+                    BEGIN TRANSACTION;
+                    CREATE TABLE android_metadata (locale text);
+                    CREATE TABLE grid_key (grid_id TEXT,key_name TEXT);
+                    CREATE TABLE grid_utfgrid (grid_id TEXT,grid_utfgrid BLOB);
+                    CREATE TABLE keymap (key_name TEXT,key_json TEXT);
+                    CREATE TABLE images (tile_data blob,tile_id text);
+                    CREATE TABLE map (zoom_level INTEGER,tile_column INTEGER,tile_row INTEGER,tile_id TEXT,grid_id TEXT);
+                    CREATE TABLE metadata (name text,value text);
+                    CREATE VIEW tiles AS SELECT map.zoom_level AS zoom_level,map.tile_column AS tile_column,map.tile_row AS tile_row,images.tile_data AS tile_data FROM map JOIN images ON images.tile_id = map.tile_id ORDER BY zoom_level,tile_column,tile_row;
+                    CREATE VIEW grids AS SELECT map.zoom_level AS zoom_level,map.tile_column AS tile_column,map.tile_row AS tile_row,grid_utfgrid.grid_utfgrid AS grid FROM map JOIN grid_utfgrid ON grid_utfgrid.grid_id = map.grid_id;
+                    CREATE VIEW grid_data AS SELECT map.zoom_level AS zoom_level,map.tile_column AS tile_column,map.tile_row AS tile_row,keymap.key_name AS key_name,keymap.key_json AS key_json FROM map JOIN grid_key ON map.grid_id = grid_key.grid_id JOIN keymap ON grid_key.key_name = keymap.key_name;
+                    CREATE UNIQUE INDEX grid_key_lookup ON grid_key (grid_id,key_name);
+                    CREATE UNIQUE INDEX grid_utfgrid_lookup ON grid_utfgrid (grid_id);
+                    CREATE UNIQUE INDEX keymap_lookup ON keymap (key_name);
+                    CREATE UNIQUE INDEX images_id ON images (tile_id);
+                    CREATE UNIQUE INDEX map_index ON map (zoom_level, tile_column, tile_row);
+                    CREATE UNIQUE INDEX name ON metadata (name);
+                    END TRANSACTION;
+                    ANALYZE;
+                    VACUUM;
+               """)
+
+        self.cache = conn
+
+    def fetch_tile(self, z, x, y):
+        tile_id = ','.join((z,x,y))
+        sw = num2deg(x, y+1, z)
+        ne = num2deg(x+1, y, z)
+        width = 256
+        height = 256
+        insert_map = """INSERT OR REPLACE INTO map (tile_id,zoom_level,tile_column,tile_row,grid_id) VALUES(?,?,?,'');"""
+        insert_data = """INSERT OR REPLACE INTO images (tile_id,tile_data) VALUES(?,?);"""
+
+        with self.cache.cursor() as c:
+            c.execute("SELECT tile_data FROM images WHERE tile_id=?", tile_id)
+            try:
+                blob = c.fetchone()[0]
+            except:
+                tile_id = filename = render('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs)
+                with open(filename) as f:
+                    blob = f.read()
+                os.unlink(filename)
+                with self.cache.cursor() as d:
+                    d.execute(insert_map, tile_id, z, x, y)
+                    d.execute(insert_data, tile_id, blob)
+        return blob
+
+    def seed_tiles(self, min_zoom, max_zoom):
+        for z in range(min_zoom, max_zoom+1):
+            for x in range(0, 2**z):
+                for y in range(0, 2**z):
+                    self.fetch_tile(z, x, y)
+
