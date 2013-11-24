@@ -1,11 +1,19 @@
 import redis
+import os
 
 ALLOWED_HOSTS = "*"
 
-REDIS_CONNECTION = redis.Redis(db=4)
-WMS_CACHE_DB = redis.Redis(db=5)  # the redis db to connect to that will store assns between styles, layers, and filenames
+REDIS_CONNECTION = redis.Redis(
+    host=os.environ.get('REDIS_HOST', 'localhost'), 
+    port=int( os.environ.get('REDIS_PORT', 6379) ), 
+    db=4)
+WMS_CACHE_DB = redis.Redis(
+    host=os.environ.get('REDIS_HOST', 'localhost'), 
+    port=int( os.environ.get('REDIS_PORT', 6379) ), 
+    db=5)
+
 IPYTHON_SETTINGS=[]
-IPYTHON_BASE='/home/ga/geoanalytics/ga_cms/static/media/ipython-notebook'
+IPYTHON_BASE='/home/geoanalytics/ga_cms/static/media/ipython-notebook'
 IPYTHON_HOST='127.0.0.1'
 
 
@@ -168,17 +176,18 @@ DATABASES = {
         # Add "postgresql_psycopg2", "mysql", "sqlite3" or "oracle".
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         # DB name or path to database file if using sqlite3.
-        "NAME": "geoanalytics",
+        "NAME": os.environ.get('POSTGIS_DB', 'docker'),
         # Not used with sqlite3.
-        "USER": "geoanalytics",
+        "USER": os.environ.get('POSTGIS_USER', 'docker'),
         # Not used with sqlite3.
-        "PASSWORD": "geoanalytics",
+        "PASSWORD": os.environ.get('POSTGIS_PASSWORD', 'docker'),
         # Set to empty string for localhost. Not used with sqlite3.
-        "HOST": "",
+        "HOST": os.environ.get('POSTGIS_HOST', 'localhost'),
         # Set to empty string for default. Not used with sqlite3.
-        "PORT": "",
+        "PORT": int(os.environ.get('POSTGIS_PORT', 5432)),
     }
 }
+POSTGIS_VERSION=(2,1,1)
 
 
 #########
