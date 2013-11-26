@@ -1,7 +1,6 @@
 import json
 import cPickle
 from django.utils.timezone import utc
-import mapnik
 from collections import OrderedDict
 from hashlib import md5
 from ga_resources import models as m
@@ -17,6 +16,11 @@ from ga_resources import predicates
 from ga_resources.models import SpatialMetadata
 import time
 import math
+
+try:
+   import mapnik
+except ImportError:
+   import mapnik2 as mapnik
 
 from osgeo import osr
 
