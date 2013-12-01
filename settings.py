@@ -27,6 +27,8 @@ IPYTHON_HOST='127.0.0.1'
 # celery settings
 BROKER_URL="redis://{REDIS_HOST}:6379/0".format(REDIS_HOST=REDIS_HOST)
 CELERY_ACCEPT_CONTENT = ['pickle', 'json', 'msgpack', 'yaml']
+CARTO_HOME='/home/docker/node_modules/carto'
+
 
 ######################
 # MEZZANINE SETTINGS #
