@@ -1,4 +1,4 @@
-from ga_ows.views.wms.base import WMS, WMSAdapterBase, WMSCache
+from ga_ows.views.wms.base import WMS, WMSAdapterBase
 
 __all__ = [WMS, WMSAdapterBase]
 

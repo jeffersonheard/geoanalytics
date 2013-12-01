@@ -1,5 +1,6 @@
-
+from django.conf import settings
 from django.conf.urls import patterns, include, url
+from django.conf.urls.static import static
 from django.contrib import admin
 
 from mezzanine.core.views import direct_to_template
@@ -15,15 +16,13 @@ urlpatterns = patterns("",
 
     # Change the admin prefix here to use an alternate URL for the
     # admin interface, which would be marginally more secure.
-    ("^admin/", include(admin.site.urls)),
+    url("^admin/", include(admin.site.urls)),
 
     url('^ga_resources/', include('ga_resources.urls')),
     url('^ga_interactive/', include('ga_interactive.urls')),
     #url('^ga_irods/', include('ga_irods.urls')),
     #url('^ga_ows/', include('ga_ows.urls')),
     #url('^flower/', include('flower.urls')),
-    url('^cera/', include('cera.urls')),
-    url('^sesar_mobile/', include('sesar_mobile.urls')),
 
     # We don't want to presume how your homepage works, so here are a
     # few patterns you can use to set it up.
