@@ -3,19 +3,30 @@ import os
 
 ALLOWED_HOSTS = "*"
 
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = int( os.environ.get('REDIS_PORT', 6379) ) 
+POSTGIS_HOST = os.environ.get('POSTGIS_HOST', 'localhost')
+POSTGIS_PORT = int( os.environ.get('POSGIS_PORT', 5432) )
+POSTGIS_DB = os.environ.get('POSTGIS_DB', 'docker')
+POSTGIS_PASSWORD = os.environ.get('POSTGIS_PASSWORD', 'docker')
+POSTGIS_USER = os.environ.get('POSTGIS_USER', 'docker')
+
 REDIS_CONNECTION = redis.Redis(
-    host=os.environ.get('REDIS_HOST', 'localhost'), 
-    port=int( os.environ.get('REDIS_PORT', 6379) ), 
+    host=REDIS_HOST,
+    port=REDIS_PORT,
     db=4)
 WMS_CACHE_DB = redis.Redis(
-    host=os.environ.get('REDIS_HOST', 'localhost'), 
-    port=int( os.environ.get('REDIS_PORT', 6379) ), 
+    host=REDIS_HOST,
+    port=REDIS_PORT,
     db=5)
 
 IPYTHON_SETTINGS=[]
 IPYTHON_BASE='/home/geoanalytics/ga_cms/static/media/ipython-notebook'
 IPYTHON_HOST='127.0.0.1'
 
+# celery settings
+BROKER_URL="redis://{REDIS_HOST}:6379/0".format(REDIS_HOST=REDIS_HOST)
+CELERY_ACCEPT_CONTENT = ['pickle', 'json', 'msgpack', 'yaml']
 CARTO_HOME='/home/docker/node_modules/carto'
 
 
@@ -178,15 +189,15 @@ DATABASES = {
         # Add "postgresql_psycopg2", "mysql", "sqlite3" or "oracle".
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         # DB name or path to database file if using sqlite3.
-        "NAME": os.environ.get('POSTGIS_DB', 'docker'),
+        "NAME": POSTGIS_DB,
         # Not used with sqlite3.
-        "USER": os.environ.get('POSTGIS_USER', 'docker'),
+        "USER": POSTGIS_USER,
         # Not used with sqlite3.
-        "PASSWORD": os.environ.get('POSTGIS_PASSWORD', 'docker'),
+        "PASSWORD": POSTGIS_PASSWORD,
         # Set to empty string for localhost. Not used with sqlite3.
-        "HOST": os.environ.get('POSTGIS_HOST', 'localhost'),
+        "HOST": POSTGIS_HOST,
         # Set to empty string for default. Not used with sqlite3.
-        "PORT": int(os.environ.get('POSTGIS_PORT', 5432)),
+        "PORT": POSTGIS_PORT,
     }
 }
 POSTGIS_VERSION=(2,1,1)
