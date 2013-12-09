@@ -1,5 +1,6 @@
 import json
 import cPickle
+import shutil
 from django.utils.timezone import utc
 from collections import OrderedDict
 from hashlib import md5
@@ -13,9 +14,10 @@ import requests
 import re
 from django.conf import settings
 from ga_resources import predicates
-from ga_resources.models import SpatialMetadata
 import time
 import math
+from sqlite3 import dbapi2 as db
+
 
 try:
    import mapnik
@@ -33,8 +35,23 @@ class Driver(object):
         self.resource = data_resource
         self.cache_path = self.resource.cache_path
         self.cached_basename = os.path.join(self.cache_path, os.path.split(self.resource.slug)[-1])
+        
+    def clear_cache(self):
+        shutil.rmtree(self.cache_path, ignore_errors=True)
+        os.mkdir(self.cache_path)
 
     def ensure_local_file(self, freshen=False):
+        """Ensures that if a resource comes from a URL that it has been retrieved in its entirety.
+
+            :param freshen: True if this file should be downloaded and the cache obliterated.  False otherwise.
+
+            :return: True if the file has changed since the last time this was called.  False if the file has not changed
+                    and None if there is no local file to be had (true for PostGIS driver and some custom drivers)
+        """
+
+        if not self.supports_local_caching():
+            return None
+
         if self.resource.resource_file:
             _, ext = os.path.splitext(self.resource.resource_file.name)
         elif self.resource.resource_url:
@@ -46,6 +63,9 @@ class Driver(object):
         self.src_ext = ext
 
         ready = os.path.exists(cached_filename) and not freshen
+        
+        if freshen:
+            self.clear_cache()
 
         if not ready:
             if self.resource.resource_file:
@@ -72,55 +92,83 @@ class Driver(object):
 
     @classmethod
     def supports_mutiple_layers(cls):
+        """If a single resource can contain multiple layers, this returns True."""
+
         return True
 
     @classmethod
     def supports_download(cls):
+        """If a user could download the resource in its entirety, this returns True."""
+
         return True
 
     @classmethod
     def supports_related(cls):
+        """True if this driver supports "join-on-key" functionality with the RelatedResource model"""
         return True
 
     @classmethod
     def supports_upload(cls):
+        """True if the user can upload a file as part of this reosurce"""
         return True
 
     @classmethod
     def supports_configuration(cls):
+        """True if the resource must be configured with a resource_config attribute"""
         return True
 
     @classmethod
     def supports_point_query(cls):
+        """True if a single geographic point can be queried."""
         return True
 
     @classmethod
-    def supports_save(cls):
+    def supports_spatial_query(cls):
+        """True if a spatial query or bounding box can be queried"""
+        return True
+
+    @classmethod
+    def supports_rest(cls):
+        """True if the REST API is supported for data sources"""
+        return True
+
+    @classmethod
+    def supports_local_caching(cls):
+        """True if the whole resource is downloaded and cached locally.  False for stream-based drivers"""
         return True
 
     @classmethod
     def datatype(cls):
+        """returns VECTOR or RASTER"""
         return VECTOR
 
     def filestream(self):
+        """returns an open file stream from the locally cached file.  Must support local caching."""
+
         self.ensure_local_file()
         return open(self.cached_basename + self.src_ext)
 
     def mimetype(self):
+        """The mime type to use when returning the original resource file via HTTP"""
         return "application/octet-stream"
 
     def ready_data_resource(self, **kwargs):
-        """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
-        ignores them"""
+        """Abstract. Ensures that the file is local and ensures that spatial metadata has been computed for the resource.
+        Full implementations of this method should also return a mapnik config dictionary as the last item of the tuple.
 
-        changed = self.resource.spatial_metadata and self.ensure_local_file(
-            freshen='fresh' in kwargs and kwargs['fresh'])
+        :return: a tuple that includes the resource slug and the spatial reference system as a osr.SpatialReference object
+        """
+
+        changed = self.ensure_local_file(freshen='fresh' in kwargs and kwargs['fresh'])
         if changed:
-            self.compute_fields(**kwargs)
+            self.compute_fields()
 
         return self.resource.slug, self.resource.srs
 
-    def compute_fields(self, **kwargs):
+    def compute_fields(self):
+        """
+        Compute the spatial metadata fields in the DataResource. Abstract.
+        """
         if self.ensure_local_file() is not None:
             filehash = md5()
             with open(self.cached_basename + self.src_ext) as f:
@@ -134,12 +182,9 @@ class Driver(object):
                 self.resource.md5sum = md5sum
                 self.resource.last_change = datetime.utcnow().replace(tzinfo=utc)
 
-        if not self.resource.spatial_metadata:
-            self.resource.spatial_metadata = SpatialMetadata.objects.create()
-
 
     def get_metadata(self, **kwargs):
-        """If there is metadata conforming to some standard, then return it here"""
+        """Abstract. If there is metadata conforming to some standard, then return it here"""
         return {}
 
     def get_data_fields(self, **kwargs):
@@ -149,16 +194,37 @@ class Driver(object):
         return []
 
     def get_filename(self, xtn):
+        """
+        Get a filename for a cached entity related to the underlying resource.
+
+        :param xtn: The file extension to used.
+        :return: The cached filename.  No guarantees it exists. The filename consists of the original filename stripped
+        of its extension and the new extension appended.
+        """
         filename = os.path.split(self.resource.slug)[-1]
         return os.path.join(self.cache_path, filename + '.' + xtn)
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=30, **kwargs):
+        """
+        Get data for a single x,y point.  This should be supported for raw rasters as well as vector data, but obviously
+        RGB data is kind of pointless.
+
+        :param wherex: the x coordinate
+        :param wherey: the y coordinate
+        :param srs: a spatial reference system, either as a string EPSG:#### or PROJ.4 string, or as an osr.SpatialReference
+        :param fuzziness: the distance in map units from the xy coodrinate that features data should be pulled from
+        :param kwargs: if fuzziness is 0, then keyword args bbox, width, and height should be passed in to let the
+            engine figure out how big a "point" is.
+        :return: a four-tuple of:
+        """
         _, nativesrs, result = self.ready_data_resource(**kwargs)
 
         s_srs = osr.SpatialReference()
         t_srs = nativesrs
 
-        if srs.lower().startswith('epsg'):
+        if isinstance(srs, osr.SpatialReference):
+            s_srs = srs
+        elif srs.lower().startswith('epsg'):
             s_srs.ImportFromEPSG(int(srs.split(':')[-1]))
         else:
             s_srs.ImportFromProj4(srs.encode('ascii'))
@@ -189,17 +255,19 @@ class Driver(object):
            dx = (maxx-minx)/width # the width delta in native coordinate units between pixels
            x2, y2, _ = crx.TransformPoint(wherex+dx*8, wherey) # return a point 8 pixels to the right of the source point in native coordinate units
            epsilon = x2 - x1 # the geometry should be buffered by this much
-           
-           
         else:
-           print json.dumps(kwargs, indent=4)
+           pass
 
         return result, x1, y1, epsilon
 
     def as_dataframe(self, **kwargs):
+        """Return the entire dataset as a pandas dataframe"""
+
         raise NotImplementedError("This driver does not support dataframes")
 
     def summary(self, **kwargs):
+        """Requires dataframe support.  Return a summary of the dataframe using pandas's standard methods and our own
+        predicates"""
 
         sum_path = self.get_filename('sum')
         if self.resource.big and os.path.exists(sum_path):
@@ -239,23 +307,12 @@ class Driver(object):
 
         return ctx
 
-def deg2num(lat_deg, lon_deg, zoom):
-    lat_rad = math.radians(lat_deg)
-    n = 2.0 ** zoom
-    xtile = int((lon_deg + 180.0) / 360.0 * n)
-    ytile = int((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
-    return (xtile, ytile)
 
-
-def num2deg(xtile, ytile, zoom):
-    n = 2.0 ** zoom
-    lon_deg = xtile / n * 360.0 - 180.0
-    lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
-    lat_deg = math.degrees(lat_rad)
-    return (lat_deg, lon_deg)
 
 
 def compile_layer(rl, layer_id, srs, css_classes, **parameters):
+    """Take a RenderedLayer and turn it into a Mapnik input file clause"""
+
     return {
         "id" : parameters['id'] if 'id' in parameters else re.sub('/', '_', layer_id),
         "name" : parameters['name'] if 'name' in parameters else re.sub('/', '_', layer_id),
@@ -265,6 +322,7 @@ def compile_layer(rl, layer_id, srs, css_classes, **parameters):
     }
 
 def compile_mml(srs, styles, *layers):
+    """Take multiple layers and stylesheets and turn it into a Mapnik input file"""
     stylesheets = [m.Style.objects.get(slug=s.split('.')[0]) for s in styles]
     css_classes = set([s.split('.')[1] if '.' in s else 'default' for s in styles])
 
@@ -277,29 +335,42 @@ def compile_mml(srs, styles, *layers):
 
 
 def compile_mapfile(name, srs, stylesheets, *layers):
+    """Compile from Carto to Mapnik"""
+
     with open(name + ".mml", 'w') as mapfile:
         mapfile.write(json.dumps(compile_mml(srs, stylesheets, *layers), indent=4))
     carto = sh.Command(settings.CARTO_HOME + "/bin/carto")
     carto(name + '.mml', _out=name + '.xml')
 
 
-def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
+LAYER_CACHE_PATH = os.path.join(s.MEDIA_ROOT, '.cache', '_cached_layers')
+
+def cache_entry_name(layers, srs, styles, bgcolor=None, transparent=None, query=None):
     d = OrderedDict(layers=layers, srs=srs, styles=styles, bgcolor=bgcolor, transparent=transparent)
+    if query: # insert the query keys, but ensure a consistent order
+        keys = sorted(query.keys())
+        for k in keys:
+            d[k] = query[k]
+
     shortname = md5()
     for key, value in d.items():
         shortname.update(key)
         shortname.update(unicode(value))
     cache_entry_basename = shortname.hexdigest()
-    cache_path = os.path.join(s.MEDIA_ROOT, '.cache', '_cached_layers')
-    if not os.path.exists(cache_path):
-        os.makedirs(cache_path)  # just in case it's not there yet.
+    return os.path.join(LAYER_CACHE_PATH, cache_entry_basename)
 
-    # add the prefix into the Redis database to make sure we know how to clean the cache out if the resource is modified
-    cached_filename = os.path.join(cache_path, cache_entry_basename)
-    for style in styles:
-        s.WMS_CACHE_DB.sadd(style, cached_filename)
-    for layer in layers:
-        s.WMS_CACHE_DB.sadd(layer, cached_filename)
+def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
+    """Take a WMS query and turn it into the appropriate MML file, if need be.  Or look up the cached MML file"""
+
+    if not os.path.exists(LAYER_CACHE_PATH):
+        os.makedirs(LAYER_CACHE_PATH)  # just in case it's not there yet.
+
+    cached_filename = cache_entry_name(
+        layers, srs, styles,
+        bgcolor=bgcolor,
+        transparent=transparent,
+        query=kwargs['query'] if 'query' in kwargs else None
+    )
 
     layer_specs = []
     for layer in layers:
@@ -323,7 +394,36 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
     return cached_filename
 
 
+def trim_cache(self, layers=list(), styles=list()):
+    """destroy relevant tile caches and cached mapnik files that are affected by a style or layer change"""
+    names = []
+    data = db.connect(os.path.join(LAYER_CACHE_PATH, 'directory.sqlite'))
+    c = data.cursor()
+    c.executemany('select basename from layers where slug=?', layers)
+    names.extend( c.fetchall() )
+    c.close()
+    c = data.cursor()
+    c.executemany('select basename from styles where slug=?', styles)
+    names.extend( c.fetchall() )
+
+    for name in names:
+        if os.path.exists(name + '.mbtiles'):
+            os.unlink(name + '.mbtiles')
+        if os.path.exists(name + '.json'):
+            os.unlink(name + '.json')
+        if os.path.exists(name + '.wmsresults'):
+            os.unlink(name + '.wmsresults')
+        if os.path.exists(name + '.mml'):
+            os.unlink(name + '.mml')
+        if os.path.exists(name + '.xml'):
+            os.unlink(name + '.xml')
+        if os.path.exists(name + '.carto'):
+            os.unlink(name + '.carto')
+
+
 def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
+    """Render a WMS request or a tile.  TODO - create an SQLite cache for this as well, based on hashed filename."""
+
     if srs.lower().startswith('epsg'):
         if srs.endswith("900913") or srs.endswith("3857"):
             srs = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null"
@@ -331,36 +431,145 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
             srs = "+init=" + srs.lower()
 
     name = prepare_wms(layers, srs, styles, **kwargs)
-    filename = md5()
-
-    filename.update("{bbox}.{width}x{height}".format(
+    filename = "{name}.{bbox}.{width}x{height}.{fmt}".format(
         name=name,
-        bbox=','.join(str(b) for b in bbox),
+        bbox='_'.join(str(b) for b in bbox),
         width=width,
         height=height,
         fmt=fmt
-    ))
-    filename = name + filename.hexdigest() + '.' + fmt
+    )
 
-    if os.path.exists(filename):
-        return filename
-    else:
-        while os.path.exists(name + ".lock"):
-            time.sleep(0.05)
-        m = mapnik.Map(width, height)
-        mapnik.load_map(m, name + '.xml')
-        m.zoom_to_box(mapnik.Box2d(*bbox))
-        mapnik.render_to_file(m, filename, fmt)
+    while os.path.exists(name + ".lock"):
+        time.sleep(0.05)
+    m = mapnik.Map(width, height)
+    mapnik.load_map(m, name + '.xml')
+    m.zoom_to_box(mapnik.Box2d(*bbox))
+    mapnik.render_to_file(m, filename, fmt)
 
-    return filename
+    with open(filename) as tiledata:
+        tile = tiledata.read()
+    os.unlink(filename)
+
+    return filename, tile
 
 
-from sqlite3 import dbapi2 as db
+
+### following procedures and functions are in support of the tiled mapping services, TMS
+
+def deg2num(lat_deg, lon_deg, zoom):
+    """
+    degree to tile number
+
+    :param lat_deg: degrees lon
+    :param lon_deg: degrees lat
+    :param zoom: web mercator zoom level
+    :return: x, y tile coordinates as a tuple
+    """
+    lat_rad = math.radians(lat_deg)
+    n = 2.0 ** zoom
+    xtile = int((lon_deg + 180.0) / 360.0 * n)
+    ytile = int((1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n)
+    return (xtile, ytile)
+
+
+def num2deg(xtile, ytile, zoom):
+    """
+    Tile number to degree of southwest point.
+
+    :param xtile: column
+    :param ytile: row
+    :param zoom: mercator zoom level
+    :return: the degree of the southwest corner as a lat/lon pair.
+    """
+    n = 2.0 ** zoom
+    lon_deg = xtile / n * 360.0 - 180.0
+    lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
+    lat_deg = math.degrees(lat_rad)
+    return (lat_deg, lon_deg)
+
+
+class CacheManager(object):
+    """For every cache that is added to the filesystem, take note of it so if the underlying data changes it can be
+    destroyed"""
+    def __init__(self):
+        self.cachename = os.path.join(LAYER_CACHE_PATH, 'directory.sqlite')
+        self.tile_caches = {}
+        self.wms_caches = {}
+
+        if os.path.exists(self.cachename):
+            conn = db.connect(self.cachename)
+        else:
+            conn = db.connect(self.cachename)
+            cursor = conn.cursor()
+            cursor.executescript("""
+                BEGIN TRANSACTION;
+                CREATE TABLE caches (kind text, name text);
+                CREATE TABLE layers (slug text, caches_rowid integer);
+                CREATE TABLE styles (slug text, caches_rowid integer);
+                CREATE TABLE resources (slug text, caches_rowid integer);
+                CREATE INDEX layers_ix ON layers (slug);
+                CREATE INDEX styles_ix ON styles (slug);
+                CREATE INDEX resources_ix on resources (slug);
+            """)
+
+    @classmethod
+    def get(cls):
+        if not hasattr(cls, '_mgr'):
+            cls._mgr = CacheManager()
+        return cls._mgr
+
+    def get_tile_cache(self, layers, styles, **kwargs):
+        name = cache_entry_name(
+            layers,
+            "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null",
+            styles,
+            bgcolor=kwargs.get('bgcolor', None),
+            transparent=kwargs.get('transparent', None),
+            query=kwargs.get('query', None)
+        )
+        if name not in self.tile_caches:
+            self.tile_caches[name] = MBTileCache(layers, styles, **kwargs)
+        return self.tile_caches[name]
+
+
+    def get_wms_cache(self, layers, srs, styles, **kwargs):
+        name = cache_entry_name(
+            layers, srs, styles,
+            bgcolor=kwargs.get('bgcolor', None),
+            transparent=kwargs.get('transparent', None),
+            query=kwargs.get('query', None)
+        )
+        if name not in self.wms_caches:
+            self.wms_caches[name] = MBTileCache(layers, styles, **kwargs)
+        return self.wms_caches[name]
+
+
+    def shave_caches(self, resource, bbox):
+        """Iterate over all caches using a particular resource and remove any resources overlapping the bounding box"""
+
+    def remove_caches_for_layer(self, layer):
+        """Iterate over all the caches using a particular layer and burn them"""
+
+    def remove_caches_for_style(self, style):
+        """Iterate over all caches using a particular stylesheet and burn them"""
+
+    def remove_caches_for_resource(self, resource):
+        """Iterate over all caches using a particular resource and burn them"""
+
+    def register_cache(self, layers, styles, name):
+        """inserts a record for every layer, resource, and cache that a cache depends on"""
+
+
 
 class MBTileCache(object):
     def __init__(self, layers, styles, **kwargs):
         self.srs = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null"
-        self.name = prepare_wms(layers, self.srs, styles, **kwargs)
+        self.name = cache_entry_name(
+            layers, self.srs, styles,
+            bgcolor=kwargs.get('bgcolor', None),
+            transparent=kwargs.get('transparent', None),
+            query=kwargs.get('query', None)
+        )
         self.cachename = self.name + '.mbtiles'
 
         self.layers = layers
@@ -394,6 +603,8 @@ class MBTileCache(object):
                     ANALYZE;
                     VACUUM;
                """)
+            cursor.close()
+            CacheManager.get().register_cache(layers, styles, self.cachename)
 
         self.cache = conn
 
@@ -411,10 +622,7 @@ class MBTileCache(object):
             try:
                 blob = c.fetchone()[0]
             except:
-                tile_id = filename = render('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs)
-                with open(filename) as f:
-                    blob = f.read()
-                os.unlink(filename)
+                tile_id, blob = render('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs)
                 with self.cache.cursor() as d:
                     d.execute(insert_map, tile_id, z, x, y)
                     d.execute(insert_data, tile_id, blob)
@@ -426,3 +634,140 @@ class MBTileCache(object):
                 for y in range(0, 2**z):
                     self.fetch_tile(z, x, y)
 
+    @classmethod
+    def shave_cache(cls, filename, bbox):
+        """Empties a bounding box out of the cache at all zoom levels to be regenerated on demand.  For supporting
+        minor edits on data"""
+        x1, y1, x2, y2 = bbox
+        conn = db.connect(filename)
+        c = conn.cursor()
+        c.execute('select min(zoom_level) from map')
+        c.execute('select max(zoom_level) from map')
+        min_zoom = c.fetchone()[0]
+        max_zoom = c.fetchone()[0]
+        c.close()
+
+        c = conn.cursor()
+        c.execute('BEGIN TRANSACTION')
+
+        del_map_entry = """
+        DELETE FROM map WHERE
+            tile_row >= ? AND
+            tile_column >= ? AND
+            tile_row <= ? AND
+            tile_column <= ? AND
+            zoom_level = ?
+        """
+
+        del_tile_data = """
+        DELETE FROM images
+        WHERE tile_id IN (
+            SELECT tile_id
+            FROM map WHERE
+                tile_row >= ? AND
+                tile_column >= ? AND
+                tile_row <= ? AND
+                tile_column <= ? AND
+                zoom_level = ?
+        )
+        """
+        for zoom in range(min_zoom, max_zoom+1):
+            a1, b1 = deg2num(x1, y1, zoom)
+            a2, b2 = deg2num(x2, y2, zoom)
+            c.execute(del_tile_data, a1, b1, a2, b2, zoom)
+            c.execute(del_map_entry, a1, b1, a2, b2, zoom)
+
+        c.execute('END TRANSACTION')
+        c.execute('ANALYZE')
+        c.execute('VACCUM')
+
+        conn.close()
+
+
+class WMSResultsCache(object):
+    def __init__(self, layers, srs, styles, **kwargs):
+        self.name = cache_entry_name(
+            layers, srs, styles,
+            bgcolor=kwargs.get('bgcolor', None),
+            transparent=kwargs.get('transparent', None),
+            query=kwargs.get('query', None)
+        )
+        self.cachename = self.name + '.wmscache'
+
+        self.srs = srs
+        self.layers = layers
+        self.styles = styles
+        self.kwargs = kwargs
+
+        if os.path.exists(self.cachename):
+            conn = db.connect(self.cachename)
+            conn.enable_load_extension(True)
+            conn.execute("select load_extension('libspatialite.so')")
+        else:
+            conn = db.connect(self.cachename)
+            conn.enable_load_extension(True)
+            conn.execute("select load_extension('libspatialite.so')")
+            cursor = conn.cursor()
+            cursor.executescript("""
+                 BEGIN TRANSACTION;
+                 SELECT InitSpatialMetadata();
+                 CREATE TABLE tiles (hash_key TEXT, last_use DATETIME, tile_data BLOB);
+                 SELECT AddGeometryColumn('tiles','bounds', 4326,  'POINT', 'XY');
+                 SELECT CreateSpatialIndex('tiles','bounds');
+                 CREATE UNIQUE INDEX hash_key_lookup ON tiles (hash_key);
+                 CREATE INDEX lru ON tiles (last_use);
+                 END TRANSACTION;
+                 ANALYZE;
+                 VACUUM;
+            """)
+            cursor.close()
+            CacheManager.get().register_cache(layers, styles, self.cachename)
+
+        self.cache = conn
+
+
+    @classmethod
+    def shave_cache(self, filename, bbox):
+        """Empties a cache of all records overlapping a certain bounding box so they are regenerated on demand.  For
+        supporting minor edits on data"""
+        x1,y1,x2,y2 = bbox
+        conn = db.connect(filename)
+        conn.execute('delete from tiles where Intersects(bounds, BuildMBR({x1},{y1},{x2},{y2}))'.format(**locals()))
+        conn.close()
+
+
+    def fetch_data(self, fmt, width, height, bbox, srs, styles, layers, **kwargs):
+        cache_basis_for_spec = cache_entry_name(
+            layers, srs, styles,
+            bgcolor=kwargs.get('bgcolor', None),
+            transparent=kwargs.get('transparent', None),
+            query=kwargs.get('query', None)
+        )
+        filename = "{name}.{bbox}.{width}x{height}.{fmt}".format(
+            name=cache_basis_for_spec,
+            bbox='_'.join(str(b) for b in bbox),
+            width=width,
+            height=height,
+            fmt=fmt
+        )
+
+        c = self.cache.cursor()
+        c.execute("UPDATE tile_data last_use = datetime('now') WHERE hash_key=?", filename)
+        c.execute('SELECT tile_data FROM tiles WHERE hash_key=?', filename)
+        insert_data = """
+            INSERT INTO tile_data (hash_key, last_use, tile_data, bounds)
+            VALUES (
+                ?,
+                datetime('now'),
+                ?,
+                GeomFromText('POLYGON(({x1} {y1}, {x2} {y1}, {x2} {y2}, {x1} {y2}, {x1} {y1})')
+            )
+        """.format(x1=bbox[0],y1=bbox[1],x2=bbox[2],y2=bbox[3])
+        try:
+            blob = c.fetchone()[0]
+        except:
+            tile_id, blob = render('png', width, height, bbox, self.srs, self.styles,
+                                   self.layers, **self.kwargs)
+            with self.cache.cursor() as d:
+                d.execute(insert_data, filename, blob)
+        return blob

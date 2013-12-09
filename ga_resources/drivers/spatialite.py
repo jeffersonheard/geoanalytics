@@ -2,6 +2,7 @@
 from uuid import uuid4
 from zipfile import ZipFile
 from django.contrib.gis.geos import Polygon, GEOSGeometry
+from django.core.files import File
 import os
 from osgeo import osr
 from . import Driver
@@ -54,7 +55,7 @@ class SpatialiteDriver(Driver):
             self._geometry_field = geometry_field
             srs = osr.SpatialReference()
             srs.ImportFromEPSG(srid)
-            self._srid = srs.ExportToProj4()
+            self._srid = srid # srs.ExportToProj4()
         elif 'sublayer' in kwargs:
             table, geometry_field = cfg['tables']['sublayer']
         else:
@@ -70,6 +71,7 @@ class SpatialiteDriver(Driver):
         self._table_name = conn['table'] = table
         self._geometry_field = conn['geometry_field'] = geometry_field
 
+        connection.execute("create index if not exists {table}_ogc_fid on {table} (OGC_FID)".format(table=table))
         return slug, srs, conn
 
     def _connection(self):
@@ -78,14 +80,15 @@ class SpatialiteDriver(Driver):
             conn = db.connect(self.get_filename('sqlite'))
             conn.enable_load_extension(True)
             conn.execute("select load_extension('libspatialite.so')")
+            conn.execute("select load_extension('/usr/lib/sqlite3/pcre.so')")
             self._conn = conn
         return self._conn
 
-    def compute_fields(self, **kwargs):
+    def compute_fields(self):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
         
-        super(SpatialiteDriver, self).compute_fields(**kwargs)
+        super(SpatialiteDriver, self).compute_fields()
 
         # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
         # file
@@ -129,9 +132,9 @@ class SpatialiteDriver(Driver):
                 out_filename, in_filename
             )
 
-        cfg = self.resource.driver_config
         connection = self._connection()
         table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry
+        self._srid = srid
 
         xmin = ymin = float('inf')
         ymax = xmax = float('-inf')
@@ -146,26 +149,28 @@ class SpatialiteDriver(Driver):
             table=table
         ))
 
-        xmin0, ymin0, xmax0, ymax0 = GEOSGeometry(c.fetchone()[0]).extent
-        xmin = xmin0 if xmin0 < xmin else xmin
-        ymin = ymin0 if ymin0 < ymin else ymin
-        xmax = xmax0 if xmax0 < xmax else xmax
-        xmax = xmax0 if xmax0 < xmax else xmax
+        try:
+            xmin0, ymin0, xmax0, ymax0 = GEOSGeometry(c.fetchone()[0]).extent
+            xmin = xmin0 if xmin0 < xmin else xmin
+            ymin = ymin0 if ymin0 < ymin else ymin
+            xmax = xmax0 if xmax0 < xmax else xmax
+            xmax = xmax0 if xmax0 < xmax else xmax
+        except TypeError:
+            xmin = ymin = xmax = ymax = 0.0
 
         crs = osr.SpatialReference()
         crs.ImportFromEPSG(srid)
-        self.resource.spatial_metadata.native_srs = crs.ExportToProj4()
+        self.resource.native_srs = crs.ExportToProj4()
 
         e4326 = osr.SpatialReference()
         e4326.ImportFromEPSG(4326)
         crx = osr.CoordinateTransformation(crs, e4326)
         x04326, y04326, _ = crx.TransformPoint(xmin, ymin)
         x14326, y14326, _ = crx.TransformPoint(xmax, ymax)
-        self.resource.spatial_metadata.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
-        self.resource.spatial_metadata.native_bounding_box = Polygon.from_bbox((xmin, ymin, xmax, ymax))
-        self.resource.spatial_metadata.three_d = False
+        self.resource.bounding_box = Polygon.from_bbox((x04326, y04326, x14326, y14326))
+        self.resource.native_bounding_box = Polygon.from_bbox((xmin, ymin, xmax, ymax))
+        self.resource.three_d = False
 
-        self.resource.spatial_metadata.save()
         self.resource.save()
 
     def _table(self, **kwargs):
@@ -181,21 +186,22 @@ class SpatialiteDriver(Driver):
         return table, geometry_field
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=0, **kwargs):
-        result, x1, y1 = super(SpatialiteDriver, self).get_data_for_point(wherex, wherey, srs, fuzziness, **kwargs)
+        result, x1, y1, epsilon = super(SpatialiteDriver, self).get_data_for_point(wherex, wherey, srs, fuzziness, **kwargs)
         cfg = self.resource.driver_config
         table, geometry_field = self._table(**kwargs)
 
-        if fuzziness == 0:
+        if epsilon == 0:
             geometry = "GeomFromText('POINT({x} {y})', {srid})".format(
                 x=x1,
                 y=y1,
-                srid=cfg['srid']
+                srid=cfg.get('srid', -1)
             )
         else:
-            geometry = "ST_Buffer(GeomFromText('POINT({x} {y})', {srid}), {fuzziness})".format(
+            geometry = "ST_Buffer(GeomFromText('POINT({x} {y})', {srid}), {epsilon})".format(
                 x=x1,
                 y=y1,
-                srid=cfg['srid']
+                srid=cfg.get('srid', -1),
+                epsilon=epsilon
             )
 
         cursor = self._cursor(**kwargs)
@@ -208,9 +214,9 @@ class SpatialiteDriver(Driver):
             geometry_field=geometry_field
         ))
         rows = [list(r) for r in cursor.fetchall()]
-        keys = [c.name for c in cursor.description]
+        keys = [c[0] for c in cursor.description]
 
-        return [zip(keys, r) for r in rows]
+        return [dict(zip(keys, r)) for r in rows]
 
     def attrquery(self, key, value):
         if '__' not in key:
@@ -406,7 +412,7 @@ class SpatialiteDriver(Driver):
             column_type=field_type
         ))
         c.close()
-        self.resource.modified()
+        self._conn.commit()
 
     def delete_row(self, key):
         c = self._cursor()
@@ -415,29 +421,33 @@ class SpatialiteDriver(Driver):
             key=key
         ))
         c.close()
-        self.resource.modified()
+        self._conn.commit()
 
     def add_row(self, **values):
         c = self._cursor()
         insert_stmt = 'insert into {table} ({keys}) values ({values})'
-        keys = list(values.keys())
-        values = [values[key] for key in keys]
-        parms = ','.join(['?' for key in keys])
-        insert_stmt.format(
+
+        keys = [k for k in values.keys() if k != 'srid']
+        vals = [values[key] for key in keys]
+        parms = ','.join(['?' if key != self._geometry_field else 'GeomFromText(?, {srid})'.format(srid=self._srid if "srid" not in values else values['srid']) for key in keys])
+        insert_stmt = insert_stmt.format(
             table=self._tablename,
-            keys=keys,
+            keys=','.join(keys),
             values=parms
         )
-        c.execute(insert_stmt, values)
+        print insert_stmt
+        c.execute(insert_stmt, vals)
         c.close()
-        self.resource.modified()
+        self._conn.commit()
 
     def update_row(self, ogc_fid, **values):
         c = self._cursor()
         insert_stmt = 'update {table} set {set_clause} where OGC_FID={ogc_fid}'
         table = self._tablename
-        set_clause = ' and '.join(["{key}=:{key}".format(key=key) for key in values.keys()])
+        set_clause = ' and '.join(["{key}=:{key}".format(key=key) if key != self._geometry_field else 'key=GeomFromText(:{key})' for key in values.keys()])
         c.execute(insert_stmt.format(**locals()), values)
+        c.close()
+        self._conn.commit()
 
     def get_row(self, ogc_fid, geometry_format='geojson'):
         c = self._cursor()
@@ -503,8 +513,7 @@ class SpatialiteDriver(Driver):
 
     def query(
             self,
-            geometry_operator='overlaps',
-            query_distance=False,
+            geometry_operator='intersects',
             query_geometry=None,
             query_mbr=None,
             query_geometry_srid=None,
@@ -513,6 +522,7 @@ class SpatialiteDriver(Driver):
             end=None,
             limit=None,
             geometry_format='geojson',
+            order_by=None,
             **kwargs
     ):
         operators = {
@@ -527,10 +537,16 @@ class SpatialiteDriver(Driver):
             'endswith': 'like',
             'isnull': '',
             'notnull': '',
-            'ne': '!='
+            'ne': '!=',
+            'regexp': 'regexp',
+            'glob': 'glob',
+            'match': 'match',
+            'between': 'between',
+            'like': 'like'
         }
         geom_operators = {
-            'equals','disjoint','touches','within','overlaps','crosses','intersects','contains'
+            'equals','disjoint','touches','within','overlaps','crosses','intersects','contains',
+            'mbrequal','mbrdisjoint','mbrtouches','mbrwithin','mbroverlaps','mbrintersects','mbrcontains'
         }
 
         c = self._cursor()
@@ -547,13 +563,13 @@ class SpatialiteDriver(Driver):
 
         limit_clause = 'LIMIT {limit}'.format(**locals()) if limit else ''
         start_clause = 'OGC_FID >= {start}'.format(**locals()) if start else False
-        end_clause = 'OGC_FID >= {end}'.format(**locals()) if start else False
+        end_clause = 'OGC_FID >= {end}'.format(**locals()) if end else False
         columns = ','.join(keys)
         checks = [key.split('__') if '__' in key else [key, '='] for key in kwargs.keys()]
-        where_clauses = ['{variable}{op}?'.format(variable=v, op=operators[o]) for v, o in checks]
-        where_values = ['%' + x + '%' if checks[i][1] == 'contains' else x for i, x in enumerate(kwargs.values())]
-        where_values = [x + '%' if checks[i][1] == 'startswith' else x for i, x in enumerate(kwargs.values())]
-        where_values = ['%' + x if checks[i][1] == 'endswith' else x for i, x in enumerate(kwargs.values())]
+        where_clauses = ['{variable} {op} ?'.format(variable=v, op=operators[o]) for v, o in checks]
+        where_values = ["%" + x + '%' if checks[i][1] == 'contains' else x for i, x in enumerate(kwargs.values())]
+        where_values = [x + '%' if checks[i][1] == 'startswith' else x for i, x in enumerate(where_values)]
+        where_values = ['%' + x if checks[i][1] == 'endswith' else x for i, x in enumerate(where_values)]
 
         if start_clause:
             where_clauses.append(start_clause)
@@ -583,12 +599,10 @@ class SpatialiteDriver(Driver):
             where_values.append(query_geometry)
             where_clauses.append(geometry_where)
 
-        where_clauses = ' and '.join(where_clauses)
+        where_clauses = ' where ' +  ' and '.join(where_clauses) if len(where_clauses) > 0 else ''
 
-        query1 = 'select {columns} from {table} where {where_clauses} {limit_clause}'.format(**locals())
-        query2 = 'select AsBinary({geometry}) from {table} where {where_clauses} {limit_clause}'.format(**locals())
-        print query1
-        print where_values
+        query1 = 'select {columns} from {table} {where_clauses} {limit_clause}'.format(**locals())
+        query2 = 'select AsBinary({geometry}) from {table} {where_clauses} {limit_clause}'.format(**locals())
 
         c.execute("select load_extension('libspatialite.so')")
         c.execute(query1, where_values)
@@ -597,30 +611,100 @@ class SpatialiteDriver(Driver):
         for row in c.fetchall():
             records.append(dict(p for p in zip(keys, row) if p[0] != geometry))
 
-        c.execute(query2, where_values)
+        geo = []
+        if (not only) or (geometry in only):
+            c.execute(query2, where_values)
 
-        if geometry_format.lower() == 'geojson':
-            geo = [json.loads(geojson.dumps(wkb.loads(str(g[0])))) for g in c.fetchall()]
-        elif geometry_format.lower() == 'wkt':
-            geo = [wkb.loads(str(g[0])).wkt for g in c.fetchall()]
-        else:
-            geo = [None for g in c.fetchall()]
+            if geometry_format.lower() == 'geojson':
+                geo = [json.loads(geojson.dumps(wkb.loads(str(g[0])))) for g in c.fetchall()]
+            elif geometry_format.lower() == 'wkt':
+                geo = [wkb.loads(str(g[0])).wkt for g in c.fetchall()]
+            else:
+                geo = [None for g in c.fetchall()]
 
         gj = []
         for i, record in enumerate(records):
-            record[geometry] = geo[i]
+            if (not only) or (geometry in only):
+                record[geometry] = geo[i]
             gj.append(record)
 
         return gj
 
 
     @classmethod
-    def create_dataset(cls, title, parent, columns_definitions):
-        pass
+    def create_dataset(cls, title, parent=None, geometry_column_name='GEOMETRY', srid=4326, geometry_type='GEOMETRY', columns_definitions=()):
+        from ga_resources.models import DataResource
+        from uuid import uuid4
+
+        filename = os.path.join('/tmp', uuid4().hex + '.sqlite')
+        conn = db.connect(filename)
+        conn.enable_load_extension(True)
+        conn.execute("select load_extension('libspatialite.so')")
+        conn.executescript("""
+            select initspatialmetadata();
+            create table layer (
+                OGC_FID INTEGER PRIMARY KEY
+            );
+            select AddGeometryColumn('layer', '{geometry_column_name}', {srid}, '{geometry_type}', 2, 1);
+        """.format(**locals()))
+        for column, datatype in columns_definitions:
+            conn.execute('alter table layer add column {column} {datatype}'.format(column=column, datatype=datatype))
+        conn.commit()
+        conn.close()
+
+        ds = DataResource.objects.create(
+            title = title,
+            parent = parent,
+            driver = 'ga_resources.drivers.spatialite',
+            resource_file=File(open(filename), filename),
+        )
+        ds.resource.compute_fields()
+        os.unlink(filename)
+        return ds
+
+    @classmethod
+    def create_dataset_with_parent_geometry(cls, title, parent, geometry_column_name='GEOMETRY', srid=4326,
+                                            geometry_type='GEOMETRY', columns_definitions=()):
+        from ga_resources.models import DataResource
+        from uuid import uuid4
+
+        pconn = parent.resource._connection() # FIXME assumes the spatialite driver for the parent, but much faster
+        c = pconn.cursor()
+        c.execute('select OGC_FID, AsBinary(Transform({geom}, {srid})) from {table}'.format(geom=parent.resource._geometry_field, table=parent.resource._table_name, srid=srid))
+        records = c.fetchall()
+
+        filename = os.path.join('/tmp', uuid4().hex + '.sqlite')
+        conn = db.connect(filename)
+        conn.enable_load_extension(True)
+        conn.execute("select load_extension('libspatialite.so')")
+        conn.executescript("""
+                    select initspatialmetadata();
+                    create table layer (
+                        OGC_FID INTEGER PRIMARY KEY
+                    );
+                    select AddGeometryColumn('layer', '{geometry_column_name}', {srid}, '{geometry_type}', 2, 1);
+                """.format(**locals()))
+
+
+        conn.executemany('insert into layer (OGC_FID, {geometry_column_name}) values (?, GeomFromWKB(?, {srid}))'.format(**locals()), records)
+        conn.commit()
+        conn.close()
+
+        ds = DataResource.objects.create(
+            title=title,
+            parent=parent,
+            driver='ga_resources.drivers.spatialite',
+            resource_file=File(open(filename), filename),
+        )
+        ds.resource.compute_fields()
+        for name,ctype in columns_definitions:
+            ds.resource.add_column(name, ctype)
+        os.unlink(filename)
+        return ds
 
     @classmethod
     def derive_dataset(cls, title, parent_page, parent_dataresource):
-        from ga_resources.models import DataResource, SpatialMetadata
+        from ga_resources.models import DataResource
         from django.conf import settings
         # create a new sqlite datasource
         slug, srs, child_spec = parent_dataresource.driver_instance.ready_data_resource()
@@ -656,53 +740,4 @@ class SpatialiteDriver(Driver):
         return names
 
 driver = SpatialiteDriver
-
-def tests():
-    from ga_resources.models import DataResource
-    print 'creating resource'
-    rs = DataResource.objects.create(
-        title='W0607',
-        content='testing...',
-        resource_file='/home/th/th_cms/th_cms/test_data/W0607.sqlite',
-        driver='ga_resources.drivers.spatialite'
-    )
-    print 'resource created'
-
-    print 'testing driver instance'
-    drv = rs.driver_instance
-    print 'driver instance created'
-
-    print 'computing spatial metadata fields'
-    drv.compute_fields()
-    print 'computed spatial metadata fields'
-
-    print "computing summary"
-    drv.summary()
-    print "computed summary"
-
-    print "adding column"
-    drv.add_column('new_column4', 'TEXT')
-    print 'added column'
-
-    print "getting dataframe"
-    df = drv.as_dataframe()
-    print "got dataframe"
-
-    print 'updating rows with column data'
-    ix, row = df.iterrows().next()
-    print row
-    drv.update_row(row['OGC_FID'], new_column2="new value")
-    print 'updated row'
-
-    print 'deleting row'
-    ix, row = df.iterrows().next()
-    drv.delete_row(row['OGC_FID'])
-    print 'deleted row'
-
-    print 'deleting resource'
-    rs.delete()
-
-
-
-
 

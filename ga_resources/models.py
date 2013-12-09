@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
 from mezzanine.core.managers import SearchableManager
@@ -44,41 +45,7 @@ class CatalogPage(Page):
 
         return p
 
-
-class SemanticRelationship(models.Model):
-    """A class to assert a relationship triple between two pages"""
-    subject = models.ForeignKey(Page, related_name='subject')
-    obj = models.ForeignKey(Page, related_name='obj')
-    verb = models.CharField(max_length=128, db_index=True, blank=False, null=False)
-
-    objects = SearchableManager()
-    search_fields = ('verb',)
-
-
-class KeyValue(models.Model):
-    """Key-value pair metadata"""
-    subject = models.ForeignKey(Page)
-    key = models.CharField(max_length=255, db_index=True, blank=False, null=False)
-    value = models.TextField(blank=True, null=True)
-
-    objects = SearchableManager()
-    search_fields = ("key","value")
-
-class Verb(Page, RichText):
-    """A class to provide the metadata about a verb, if it is needed"""
-    verb = models.CharField(max_length=128, unique=True, null=False, blank=False)
-
-class SpatialMetadata(models.Model):
-    """Automatically generated metadata by the Resource driver"""
-    native_bounding_box = models.PolygonField(null=True)
-    bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
-    three_d = models.BooleanField(default=False)
-    native_srs = models.TextField(null=True, blank=True)
-
-    objects = models.GeoManager()
-
-    def __unicode__(self):
-        return u"Metadata for " # + self.dataresource.slug
+    
 
 class DataResource(Page, RichText):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
@@ -92,13 +59,24 @@ class DataResource(Page, RichText):
     md5sum = models.CharField(max_length=64, blank=True, null=True) # the unique md5 sum of the data
     metadata_url = models.URLField(null=True, blank=True)
     metadata_xml = models.TextField(null=True, blank=True)
-    spatial_metadata = models.OneToOneField(SpatialMetadata, null=True, blank=True)
+    native_bounding_box = models.PolygonField(null=True)
+    bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
+    three_d = models.BooleanField(default=False)
+    native_srs = models.TextField(null=True, blank=True)
+    public = models.BooleanField(default=True)
+    owner = models.ForeignKey(User, null=True)
+    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True )
+    
     driver = models.CharField(
-        default='ga_resources.drivers.shapefile',
+        default='ga_resources.drivers.spatialite',
         max_length=255,
         null=False,
         blank=False,
         choices=getattr(s, 'INSTALLED_DATARESOURCE_DRIVERS', (
+            ('ga_resources.drivers.spatialite', 'Spatialite (universal)'),
             ('ga_resources.drivers.shapefile', 'Shapefile'),
             ('ga_resources.drivers.geotiff', 'GeoTIFF'),
             ('ga_resources.drivers.postgis', 'PostGIS'),
@@ -113,7 +91,7 @@ class DataResource(Page, RichText):
     @property
     def srs(self):
         srs = osr.SpatialReference()
-        srs.ImportFromProj4(self.spatial_metadata.native_srs.encode('ascii'))
+        srs.ImportFromProj4(self.native_srs.encode('ascii'))
         return srs
 
     @property
@@ -122,19 +100,19 @@ class DataResource(Page, RichText):
 
     @property
     def driver_instance(self):
+        """deprecated"""
         if not hasattr(self, '_driver_instance'):
             self._driver_instance = importlib.import_module(self.driver).driver(self)
         return self._driver_instance
 
+    @property
+    def resource(self):
+        return self.driver_instance
+
     def modified(self):
         self.last_refresh = datetime.datetime.utcnow().replace(tzinfo=utc)
-        if s.WMS_CACHE_DB.exists(self.slug):
-            cached_filenames = s.WMS_CACHE_DB.smembers(self.slug)
-            for filename in cached_filenames:
-                sh.rm('-rf', sh.glob(filename + "*"))
-            sh.rm('-rf', self.cache_path)
-            s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
-
+        self.driver_instance.clear_cache()
+        
     @property
     def cache_path(self):
         p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
@@ -147,6 +125,117 @@ class DataResource(Page, RichText):
         return json.loads(self.resource_config) if self.resource_config else {}
 
 
+    def add_edit_user(self, user):
+        users = { int(k) for k in self.edit_users.split(',') }        
+        users.add(user.pk)
+        self.edit_users = ','.join(str(u) for u in users)
+
+
+    def add_view_user(self, user):
+        users = { int(k) for k in self.view_users.split(',') }        
+        users.add(user.pk)
+        self.view_users = ','.join(str(u) for u in users)
+
+
+    def add_edit_group(self, group):
+        groups = { int(k) for k in self.edit_groups.split(',') }        
+        groups.add(group.pk)
+        self.edit_groups = ','.join(str(u) for u in groups)
+
+
+    def add_view_group(self, group):
+        groups = { int(k) for k in self.view_groups.split(',') }        
+        groups.add(group.pk)
+        self.view_groups = ','.join(str(u) for u in groups)
+
+
+    def remove_edit_user(self, user):
+        users = {int(k) for k in self.edit_users.split(',')}
+        users.remove(user.pk)
+        self.edit_users = ','.join(str(u) for u in users)
+
+
+    def remove_view_user(self, user):
+        users = {int(k) for k in self.view_users.split(',')}
+        users.remove(user.pk)
+        self.view_users = ','.join(str(u) for u in users)
+
+
+    def remove_edit_group(self, group):
+        groups = {int(k) for k in self.edit_groups.split(',')}
+        groups.remove(group.pk)
+        self.edit_groups = ','.join(str(u) for u in groups)
+
+
+    def remove_view_group(self, group):
+        groups = {int(k) for k in self.view_groups.split(',')}
+        groups.remove(group.pk)
+        self.view_groups = ','.join(str(u) for u in groups)    
+
+
+    def can_add(self, request):
+        if request.user.is_authenticated():
+            if request.user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.edit_users.split(',')}
+                groups = {int(k) for k in self.edit_groups.split(',')}
+
+                if len(users) > 0 and request.user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return request.user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+
+    def can_delete(self, request):
+        if request.user.is_authenticated():
+            if request.user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.edit_users.split(',')}
+                groups = {int(k) for k in self.edit_groups.split(',')}
+
+                if len(users) > 0 and request.user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return request.user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+    
+    
+    def can_change(self, request):
+        if request.user.is_authenticated():
+            if request.user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.edit_users.split(',')}
+                groups = {int(k) for k in self.edit_groups.split(',')}
+
+                if len(users) > 0 and request.user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return request.user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+    
+    
+    def can_view(self, request):
+        if request.user.is_authenticated():
+            if request.user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.view_users.split(',')}
+                groups = {int(k) for k in self.view_groups.split(',')}
+
+                if len(users) > 0 and request.user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return request.user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+        
+        
 
 class OrderedResource(models.Model):
     resource_group = models.ForeignKey("ResourceGroup")
