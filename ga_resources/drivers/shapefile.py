@@ -2,7 +2,6 @@
 import pandas
 from django.conf import settings as s
 from django.contrib.gis.geos import Polygon, GEOSGeometry
-from ga_resources.models import SpatialMetadata
 import os
 from osgeo.ogr import Geometry
 import sh

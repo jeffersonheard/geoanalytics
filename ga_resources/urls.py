@@ -14,4 +14,19 @@ urlpatterns = patterns('',
     url(r'^kmz-features/(?P<slug>.*)/', views.kmz_features),
     url(r'^kmz-resource/(?P<slug>.*):(?P<filename>.*)/?', views.kmz_resource),
     url(r'^kmz-coverages/(?P<slug>.*)/', views.kmz_ground_overlays_json),
+
+    # Data API
+
+    url(r'^new/', views.create_dataset),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/schema/', views.schema),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/query/(?P<x1>[0-9\-.]+),(?P<y1>[0-9\-.]+),(?P<x2>[0-9\-.]+),(?P<y2>[0-9\-.]+)(?P<srid>;[0-9]+)?/',
+        views.query),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/query/', views.query),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/add_column/', views.add_column),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/(?P<ogc_fid>[0-9]+)/', views.CRUDView.as_view()),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/(?P<ogc_fid_start>[0-9]+):(?P<ogc_fid_end>[0-9]+)/', views.CRUDView.as_view()),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/(?P<ogc_fid_start>[0-9]+),(?P<limit>[0-9]+)/', views.CRUDView.as_view()),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/fork/', views.derive_dataset),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/fork_geometry/', views.create_dataset_with_parent_geometry),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/', views.CRUDView.as_view()),
 )

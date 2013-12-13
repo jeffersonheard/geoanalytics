@@ -435,7 +435,6 @@ class SpatialiteDriver(Driver):
             keys=','.join(keys),
             values=parms
         )
-        print insert_stmt
         c.execute(insert_stmt, vals)
         c.close()
         self._conn.commit()
@@ -444,7 +443,7 @@ class SpatialiteDriver(Driver):
         c = self._cursor()
         insert_stmt = 'update {table} set {set_clause} where OGC_FID={ogc_fid}'
         table = self._tablename
-        set_clause = ' and '.join(["{key}=:{key}".format(key=key) if key != self._geometry_field else 'key=GeomFromText(:{key})' for key in values.keys()])
+        set_clause = ','.join(["{key}=:{key}".format(key=key) if key != self._geometry_field else 'key=GeomFromText(:{key})' for key in values.keys()])
         c.execute(insert_stmt.format(**locals()), values)
         c.close()
         self._conn.commit()
@@ -632,7 +631,7 @@ class SpatialiteDriver(Driver):
 
 
     @classmethod
-    def create_dataset(cls, title, parent=None, geometry_column_name='GEOMETRY', srid=4326, geometry_type='GEOMETRY', columns_definitions=()):
+    def create_dataset(cls, title, parent=None, geometry_column_name='GEOMETRY', srid=4326, geometry_type='GEOMETRY', owner=None, columns_definitions=()):
         from ga_resources.models import DataResource
         from uuid import uuid4
 
@@ -647,6 +646,7 @@ class SpatialiteDriver(Driver):
             );
             select AddGeometryColumn('layer', '{geometry_column_name}', {srid}, '{geometry_type}', 2, 1);
         """.format(**locals()))
+
         for column, datatype in columns_definitions:
             conn.execute('alter table layer add column {column} {datatype}'.format(column=column, datatype=datatype))
         conn.commit()
@@ -657,20 +657,24 @@ class SpatialiteDriver(Driver):
             parent = parent,
             driver = 'ga_resources.drivers.spatialite',
             resource_file=File(open(filename), filename),
+            in_menus=[],
+            owner=owner
+
         )
         ds.resource.compute_fields()
         os.unlink(filename)
         return ds
 
     @classmethod
-    def create_dataset_with_parent_geometry(cls, title, parent, geometry_column_name='GEOMETRY', srid=4326,
-                                            geometry_type='GEOMETRY', columns_definitions=()):
+    def create_dataset_with_parent_geometry(cls, title, parent_dataresource, parent=None, geometry_column_name='GEOMETRY', srid=4326,
+                                            geometry_type='GEOMETRY', owner=None, columns_definitions=()):
         from ga_resources.models import DataResource
         from uuid import uuid4
 
-        pconn = parent.resource._connection() # FIXME assumes the spatialite driver for the parent, but much faster
+        parent_dataresource.resource.ready_data_resource()
+        pconn = parent_dataresource.resource._connection() # FIXME assumes the spatialite driver for the parent, but much faster
         c = pconn.cursor()
-        c.execute('select OGC_FID, AsBinary(Transform({geom}, {srid})) from {table}'.format(geom=parent.resource._geometry_field, table=parent.resource._table_name, srid=srid))
+        c.execute('select OGC_FID, AsBinary(Transform({geom}, {srid})) from {table}'.format(geom=parent_dataresource.resource._geometry_field, table=parent_dataresource.resource._table_name, srid=srid))
         records = c.fetchall()
 
         filename = os.path.join('/tmp', uuid4().hex + '.sqlite')
@@ -688,6 +692,11 @@ class SpatialiteDriver(Driver):
 
         conn.executemany('insert into layer (OGC_FID, {geometry_column_name}) values (?, GeomFromWKB(?, {srid}))'.format(**locals()), records)
         conn.commit()
+
+        for column, datatype in columns_definitions:
+            conn.execute(
+                'alter table layer add column {column} {datatype}'.format(column=column, datatype=datatype))
+
         conn.close()
 
         ds = DataResource.objects.create(
@@ -695,6 +704,8 @@ class SpatialiteDriver(Driver):
             parent=parent,
             driver='ga_resources.drivers.spatialite',
             resource_file=File(open(filename), filename),
+            in_menus=[],
+            owner=owner
         )
         ds.resource.compute_fields()
         for name,ctype in columns_definitions:
@@ -703,7 +714,7 @@ class SpatialiteDriver(Driver):
         return ds
 
     @classmethod
-    def derive_dataset(cls, title, parent_page, parent_dataresource):
+    def derive_dataset(cls, title, parent_page, parent_dataresource, owner=None):
         from ga_resources.models import DataResource
         from django.conf import settings
         # create a new sqlite datasource
@@ -725,7 +736,9 @@ class SpatialiteDriver(Driver):
             parent=parent_page,
             resource_file = new_filename,
             driver='ga_resources.drivers.spatialite',
-            in_menus=[]
+            in_menus=[],
+            owner=owner
+
         )
         ds.driver_instance.ensure_local_file()
         ds.driver_instance.compute_fields()

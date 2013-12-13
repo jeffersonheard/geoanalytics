@@ -175,7 +175,9 @@ class DataResource(Page, RichText):
 
     def can_add(self, request):
         if request.user.is_authenticated():
-            if request.user.pk == self.owner.pk:
+            if not self.owner:
+                return request.user.is_superuser
+            elif request.user.pk == self.owner.pk:
                 return True
             else:
                 users = {int(k) for k in self.edit_users.split(',')}
@@ -190,7 +192,9 @@ class DataResource(Page, RichText):
 
     def can_delete(self, request):
         if request.user.is_authenticated():
-            if request.user.pk == self.owner.pk:
+            if not self.owner:
+                return request.user.is_superuser
+            elif request.user.pk == self.owner.pk:
                 return True
             else:
                 users = {int(k) for k in self.edit_users.split(',')}
@@ -206,7 +210,9 @@ class DataResource(Page, RichText):
     
     def can_change(self, request):
         if request.user.is_authenticated():
-            if request.user.pk == self.owner.pk:
+            if not self.owner:
+                return request.user.is_superuser
+            elif request.user.pk == self.owner.pk:
                 return True
             else:
                 users = {int(k) for k in self.edit_users.split(',')}
@@ -221,8 +227,12 @@ class DataResource(Page, RichText):
     
     
     def can_view(self, request):
+        if self.public:
+            return True
         if request.user.is_authenticated():
-            if request.user.pk == self.owner.pk:
+            if not self.owner:
+                return request.user.is_superuser
+            elif request.user.pk == self.owner.pk:
                 return True
             else:
                 users = {int(k) for k in self.view_users.split(',')}

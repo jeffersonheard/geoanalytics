@@ -78,20 +78,6 @@ class RelatedResource(AbstractPageResource):
             url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
         ]
 
-class SpatialMetadata(ModelResource):
-    class Meta:
-        authorization = Authorization()
-        authentication = SessionAuthentication()
-        allowed_methods = ['get']
-        queryset = models.SpatialMetadata.objects.all()
-        resource_name = 'spatial_metadata'
-        detail_uri_name = "slug"
-    
-    def prepend_urls(self):
-        return [
-            url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
-        ]
-
 class Page(AbstractPageResource):
    class Meta:
         queryset = Page.objects.all()
@@ -106,7 +92,6 @@ class Page(AbstractPageResource):
  
 
 class DataResource(AbstractPageResource):
-    spatial_metadata = OneToOneField(SpatialMetadata, 'spatial_metadata', full=True, null=True, blank=True, readonly=True)
     parent = ForeignKey(CatalogPage, 'parent', full=False, null=True, blank=True, readonly=False)
 
     class Meta(BaseMeta):
@@ -136,7 +121,6 @@ resources = Api()
 resources.register(User())
 resources.register(Group())
 resources.register(RelatedResource())
-resources.register(SpatialMetadata())
 resources.register(DataResource())
 resources.register(ResourceGroup())
 resources.register(CatalogPage())
