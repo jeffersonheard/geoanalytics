@@ -1,3 +1,5 @@
+from tempfile import NamedTemporaryFile
+import pandas
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -55,7 +57,7 @@ def authorize(request, page=None, edit=False, add=False, delete=False, view=Fals
 
 
 def get_data_page_for_user(user):
-    p, _ = CatalogPage.ensure_page(user.username, "datasets")
+    p = CatalogPage.ensure_page(user.username, "datasets")
     return p
 
 
@@ -129,6 +131,15 @@ def create_dataset_with_parent_geometry(request, slug):
     geometry_type = request.REQUEST.get('geometry_type', 'GEOMETRY')
     columns_definitions = json.loads(request.REQUEST.get('columns_definitions', "{}"))
     columns_definitions = ((key, value) for key, value in columns_definitions.items())
+    parent_key = request.REQUEST.get('parent_key', None)
+    child_key = request.REQUEST.get('child_key', None)
+    csv = None
+
+    if len(request.FILES.keys()) > 0:
+        csvfile = NamedTemporaryFile(suffix='csv')
+        csvfile.write(request.FILES[request.FILES.keys().next()].read())
+        csvfile.flush()
+        csv = pandas.DataFrame.from_csv(csvfile.name)
 
     if 'parent_page' in request.REQUEST:
         parent_page = Page.objects.get(slug=request.REQUEST['parent_page'])
@@ -139,16 +150,28 @@ def create_dataset_with_parent_geometry(request, slug):
     parent_dataresource = DataResource.objects.get(slug=parent_dataresource)
     authorize(request, parent_page, view=True)
 
-    ds = SpatialiteDriver.create_dataset_with_parent_geometry(
-        title=title,
-        parent=parent_page,
-        parent_dataresource=parent_dataresource,
-        srid=srid,
-        columns_definitions=columns_definitions,
-        geometry_type=geometry_type,
-        owner=request.user
-
-    )
+    if csv:
+        ds = SpatialiteDriver.join_data_with_existing_geometry(
+            title=title,
+            parent=parent_page,
+            new_data=csv,
+            join_field_in_existing_data=parent_key,
+            join_field_in_new_data=child_key,
+            parent_dataresource=parent_dataresource,
+            srid=srid,
+            geometry_type=geometry_type,
+            owner=request.user
+        )
+    else:
+        ds = SpatialiteDriver.create_dataset_with_parent_geometry(
+            title=title,
+            parent=parent_page,
+            parent_dataresource=parent_dataresource,
+            srid=srid,
+            columns_definitions=columns_definitions,
+            geometry_type=geometry_type,
+            owner=request.user
+        )
 
     return json_or_jsonp(request, {'path': ds.slug}, code=201)
 
@@ -240,7 +263,6 @@ def query(request, slug=None, **kwargs):
     geometry = request.REQUEST.get('g', None)
     geometry_format = request.REQUEST.get('format', 'geojson')
     geometry_operator = request.REQUEST.get('op', 'intersects')
-    query_distance = request.REQUEST.get('query_distance', False)
     limit = maybeint(request.REQUEST.get('limit', None))
     start = maybeint(request.REQUEST.get('start', None))
     end = maybeint(request.REQUEST.get('end', None))
@@ -249,7 +271,7 @@ def query(request, slug=None, **kwargs):
         only = only.split(',')
 
     rest = {k: v for k, v in request.REQUEST.items() if
-            k not in {'limit', 'start', 'end', 'only', 'g', 'op', 'format', 'query_distance'}}
+            k not in {'limit', 'start', 'end', 'only', 'g', 'op', 'format'}}
 
     rows = ds.driver_instance.query(
         query_mbr=geometry_mbr,

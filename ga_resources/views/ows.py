@@ -3,7 +3,8 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from ga_ows.views import wms, wfs
 from ga_resources import models
-from ga_resources.drivers import shapefile, render
+from ga_resources.drivers import shapefile, render, CacheManager
+from ga_resources.models import RenderedLayer
 from matplotlib.finance import md5
 from osgeo import osr, ogr
 
@@ -232,8 +233,10 @@ class WFS(wfs.WFS):
 
 
 def tms(request, layer, z, x, y, **kwargs):
-    from ga_resources.drivers import MBTileCache
+    z = int(z)
+    x = int(x)
+    y = int(y)
 
-    style = request.get('styles', None)
-    tms = MBTileCache(layer, style)
+    style = request.GET.get('styles', RenderedLayer.objects.get(slug=layer).default_style.slug)
+    tms = CacheManager.get().get_tile_cache([layer], [style])
     return HttpResponse(tms.fetch_tile(z, x, y), mimetype='image/png')

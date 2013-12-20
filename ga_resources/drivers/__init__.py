@@ -345,7 +345,7 @@ def compile_mapfile(name, srs, stylesheets, *layers):
 
 LAYER_CACHE_PATH = os.path.join(s.MEDIA_ROOT, '.cache', '_cached_layers')
 
-def cache_entry_name(layers, srs, styles, bgcolor=None, transparent=None, query=None):
+def cache_entry_name(layers, srs, styles, bgcolor=None, transparent=True, query=None):
     d = OrderedDict(layers=layers, srs=srs, styles=styles, bgcolor=bgcolor, transparent=transparent)
     if query: # insert the query keys, but ensure a consistent order
         keys = sorted(query.keys())
@@ -359,7 +359,7 @@ def cache_entry_name(layers, srs, styles, bgcolor=None, transparent=None, query=
     cache_entry_basename = shortname.hexdigest()
     return os.path.join(LAYER_CACHE_PATH, cache_entry_basename)
 
-def prepare_wms(layers, srs, styles, bgcolor=None, transparent=None, **kwargs):
+def prepare_wms(layers, srs, styles, bgcolor=None, transparent=True, **kwargs):
     """Take a WMS query and turn it into the appropriate MML file, if need be.  Or look up the cached MML file"""
 
     if not os.path.exists(LAYER_CACHE_PATH):
@@ -447,7 +447,7 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
     mapnik.render_to_file(m, filename, fmt)
 
     with open(filename) as tiledata:
-        tile = tiledata.read()
+        tile = buffer(tiledata.read())
     os.unlink(filename)
 
     return filename, tile
@@ -485,7 +485,7 @@ def num2deg(xtile, ytile, zoom):
     lon_deg = xtile / n * 360.0 - 180.0
     lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
     lat_deg = math.degrees(lat_rad)
-    return (lat_deg, lon_deg)
+    return (lon_deg, lat_deg)
 
 
 class CacheManager(object):
@@ -511,24 +511,36 @@ class CacheManager(object):
                 CREATE INDEX styles_ix ON styles (slug);
                 CREATE INDEX resources_ix on resources (slug);
             """)
+            conn.commit()
 
     @classmethod
     def get(cls):
+        import threading
+
         if not hasattr(cls, '_mgr'):
-            cls._mgr = CacheManager()
-        return cls._mgr
+            cls._mgr = threading.local()
+        if not hasattr(cls._mgr, 'mgr'):
+            cls._mgr.mgr = CacheManager()
+
+        return cls._mgr.mgr
 
     def get_tile_cache(self, layers, styles, **kwargs):
+        print layers,styles,kwargs
+
         name = cache_entry_name(
             layers,
             "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null",
             styles,
             bgcolor=kwargs.get('bgcolor', None),
-            transparent=kwargs.get('transparent', None),
+            transparent=kwargs.get('transparent', True),
             query=kwargs.get('query', None)
         )
         if name not in self.tile_caches:
-            self.tile_caches[name] = MBTileCache(layers, styles, **kwargs)
+            self.tile_caches[name] = MBTileCache(layers, styles,
+                                                 bgcolor=kwargs.get('bgcolor', None),
+                                                 transparent=kwargs.get('transparent', True),
+                                                 query=kwargs.get('query', None)
+            )
         return self.tile_caches[name]
 
 
@@ -536,11 +548,14 @@ class CacheManager(object):
         name = cache_entry_name(
             layers, srs, styles,
             bgcolor=kwargs.get('bgcolor', None),
-            transparent=kwargs.get('transparent', None),
+            transparent=kwargs.get('transparent', True),
             query=kwargs.get('query', None)
         )
         if name not in self.wms_caches:
-            self.wms_caches[name] = MBTileCache(layers, styles, **kwargs)
+            self.wms_caches[name] = MBTileCache(layers, styles,
+                                                bgcolor=kwargs.get('bgcolor', None),
+                                                transparent=kwargs.get('transparent', True),
+                                                query=kwargs.get('query', None))
         return self.wms_caches[name]
 
 
@@ -560,21 +575,32 @@ class CacheManager(object):
         """inserts a record for every layer, resource, and cache that a cache depends on"""
 
 
-
 class MBTileCache(object):
     def __init__(self, layers, styles, **kwargs):
         self.srs = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null"
         self.name = cache_entry_name(
             layers, self.srs, styles,
             bgcolor=kwargs.get('bgcolor', None),
-            transparent=kwargs.get('transparent', None),
+            transparent=kwargs.get('transparent', True),
             query=kwargs.get('query', None)
         )
         self.cachename = self.name + '.mbtiles'
 
-        self.layers = layers
-        self.styles = styles
+        self.layers = layers if not isinstance(layers, basestring) else [layers]
+        self.styles = styles if not isinstance(styles, basestring) else [styles]
         self.kwargs = kwargs
+        e4326 = osr.SpatialReference()
+        e3857 = osr.SpatialReference()
+        e4326.ImportFromEPSG(4326)
+        e3857.ImportFromEPSG(900913)
+        self.crx = osr.CoordinateTransformation(e4326, e3857)
+
+        paths = os.path.split(self.cachename)[:-1]
+        p = ''
+        for name in paths:
+            p += '/' + name
+            if not os.path.exists(p):
+                os.mkdir(p)
 
         if os.path.exists(self.cachename):
             conn = db.connect(self.cachename)
@@ -609,23 +635,28 @@ class MBTileCache(object):
         self.cache = conn
 
     def fetch_tile(self, z, x, y):
-        tile_id = ','.join((z,x,y))
-        sw = num2deg(x, y+1, z)
-        ne = num2deg(x+1, y, z)
+        tile_id = u':'.join(str(k) for k in (z,x,y))
+        sw = self.crx.TransformPoint(*num2deg(x, y+1, z))
+        ne = self.crx.TransformPoint(*num2deg(x+1, y, z))
         width = 256
         height = 256
-        insert_map = """INSERT OR REPLACE INTO map (tile_id,zoom_level,tile_column,tile_row,grid_id) VALUES(?,?,?,'');"""
+        insert_map = """INSERT OR REPLACE INTO map (tile_id,zoom_level,tile_column,tile_row,grid_id) VALUES(?,?,?,?,'');"""
         insert_data = """INSERT OR REPLACE INTO images (tile_id,tile_data) VALUES(?,?);"""
 
-        with self.cache.cursor() as c:
-            c.execute("SELECT tile_data FROM images WHERE tile_id=?", tile_id)
-            try:
-                blob = c.fetchone()[0]
-            except:
-                tile_id, blob = render('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs)
-                with self.cache.cursor() as d:
-                    d.execute(insert_map, tile_id, z, x, y)
-                    d.execute(insert_data, tile_id, blob)
+        c = self.cache.cursor()
+        c.execute("SELECT tile_data FROM images WHERE tile_id=?", [tile_id])
+        try:
+            blob = buffer(c.fetchone()[0])
+        except:
+            _, blob = render('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs)
+            if len(blob) > 350:
+                d = self.cache.cursor()
+                d.execute(insert_map, [tile_id, z, x, y])
+                d.execute(insert_data, [tile_id, blob])
+                self.cache.commit()
+                d.close()
+        c.close()
+
         return blob
 
     def seed_tiles(self, min_zoom, max_zoom):

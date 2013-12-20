@@ -3,6 +3,7 @@ from uuid import uuid4
 from zipfile import ZipFile
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 from django.core.files import File
+import numpy
 import os
 from osgeo import osr
 from . import Driver
@@ -47,6 +48,8 @@ class SpatialiteDriver(Driver):
         conn = {
             'type': 'sqlite',
             'file': self.get_filename('sqlite'),
+            'extent': self.resource.native_bounding_box.extent,
+            'wkb_format' : 'spatialite'
         }
 
         if 'table' not in cfg:
@@ -89,6 +92,9 @@ class SpatialiteDriver(Driver):
         ignores them"""
         
         super(SpatialiteDriver, self).compute_fields()
+
+        if not hasattr(self, "src_ext") and self.resource.resource_file :
+            self.src_ext = self.resource.resource_file.split('.')[-1]
 
         # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
         # file
@@ -136,25 +142,18 @@ class SpatialiteDriver(Driver):
         table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry
         self._srid = srid
 
-        xmin = ymin = float('inf')
-        ymax = xmax = float('-inf')
-
         dataframe = self.get_filename('dfx')
         if os.path.exists(dataframe):
             os.unlink(dataframe)
 
         c = connection.cursor()
-        c.execute("select AsText(Envelope(w.{geom_field})) from {table} as w".format(
+        c.execute("select AsText(Extent(w.{geom_field})) from {table} as w".format(
             geom_field=geometry_field,
             table=table
         ))
 
         try:
-            xmin0, ymin0, xmax0, ymax0 = GEOSGeometry(c.fetchone()[0]).extent
-            xmin = xmin0 if xmin0 < xmin else xmin
-            ymin = ymin0 if ymin0 < ymin else ymin
-            xmax = xmax0 if xmax0 < xmax else xmax
-            xmax = xmax0 if xmax0 < xmax else xmax
+            xmin, ymin, xmax, ymax = GEOSGeometry(c.fetchone()[0]).extent
         except TypeError:
             xmin = ymin = xmax = ymax = 0.0
 
@@ -510,6 +509,15 @@ class SpatialiteDriver(Driver):
             # gj.append({'type': 'feature', 'geometry': geo[i], 'properties': record})
         return gj
 
+    def create_index(self, *fields):
+        c = self._cursor()
+        index_name = '_'.join(fields)
+        c.execute('create index {index_name} on {table} ({fields})'.format(
+            index_name=index_name,
+            table=self._tablename,
+            fields=','.join(fields)
+        ))
+
     def query(
             self,
             geometry_operator='intersects',
@@ -645,6 +653,7 @@ class SpatialiteDriver(Driver):
                 OGC_FID INTEGER PRIMARY KEY
             );
             select AddGeometryColumn('layer', '{geometry_column_name}', {srid}, '{geometry_type}', 2, 1);
+            select CreateSpatialIndex('layer','{geometry_column_name}');
         """.format(**locals()))
 
         for column, datatype in columns_definitions:
@@ -687,6 +696,7 @@ class SpatialiteDriver(Driver):
                         OGC_FID INTEGER PRIMARY KEY
                     );
                     select AddGeometryColumn('layer', '{geometry_column_name}', {srid}, '{geometry_type}', 2, 1);
+                    select CreateSpatialIndex('layer','{geometry_column_name}');
                 """.format(**locals()))
 
 
@@ -710,6 +720,77 @@ class SpatialiteDriver(Driver):
         ds.resource.compute_fields()
         for name,ctype in columns_definitions:
             ds.resource.add_column(name, ctype)
+        os.unlink(filename)
+        return ds
+
+    @classmethod
+    def join_data_with_existing_geometry(
+            cls, title, parent_dataresource,
+            new_data, join_field_in_existing_data, join_field_in_new_data,
+            parent=None, geometry_column_name='GEOMETRY', srid=4326, geometry_type='GEOMETRY', owner=None):
+        from ga_resources.models import DataResource
+        from uuid import uuid4
+
+        parent_dataresource.resource.ready_data_resource()
+        pconn = parent_dataresource.resource._connection() # FIXME assumes the spatialite driver for the parent, but much faster
+        c = pconn.cursor()
+        c.execute('select OGC_FID, AsBinary(Transform({geom}, {srid}), {join_field_in_existing_data}) from {table}'.format(
+            geom=parent_dataresource.resource._geometry_field,
+            table=parent_dataresource.resource._table_name,
+            srid=srid,
+            join_field_in_existing_data=join_field_in_existing_data))
+        records = c.fetchall()
+
+        filename = os.path.join('/tmp', uuid4().hex + '.sqlite')
+        conn = db.connect(filename)
+        conn.enable_load_extension(True)
+        conn.execute("select load_extension('libspatialite.so')")
+        conn.executescript("""
+                    select initspatialmetadata();
+                    create table layer (
+                        OGC_FID INTEGER PRIMARY KEY
+                    );
+                    select AddGeometryColumn('layer', '{geometry_column_name}', {srid}, '{geometry_type}', 2, 1);
+                    select CreateSpatialIndex('layer','{geometry_column_name}');
+                    create index layer_{join_field_on_existing_data} on layer ({join_field_on_existing_data});
+                """.format(**locals()))
+
+
+        conn.executemany('insert into layer (OGC_FID, {geometry_column_name}, {join_field_in_existing_data}) values (?, GeomFromWKB(?, {srid}))'.format(**locals()), records)
+        conn.commit()
+
+        for column in new_data.keys():
+            if new_data[column].dtype is numpy.float64:
+                datatype = 'REAL'
+            elif new_data[column].dtype is numpy.int64:
+                datatype = 'INTEGER'
+            else:
+                datatype = 'TEXT'
+
+            conn.execute(
+                'alter table layer add column {column} {datatype}'.format(column=column, datatype=datatype))
+
+        columns = list(new_data.keys())
+        conn.executemany("""
+            UPDATE layer SET
+            {columns}
+            WHERE {join_field_in_existing_data}=?
+        """.format(
+            columns=','.join(k + '=?' for k in columns),
+            join_field_in_existing_data=join_field_in_existing_data
+        ), [[r[c] for c in columns] + [r[join_field_in_new_data]] for _, r in new_data.iterrows()] )
+
+        conn.close()
+
+        ds = DataResource.objects.create(
+            title=title,
+            parent=parent,
+            driver='ga_resources.drivers.spatialite',
+            resource_file=File(open(filename), filename),
+            in_menus=[],
+            owner=owner
+        )
+        ds.resource.compute_fields()
         os.unlink(filename)
         return ds
 

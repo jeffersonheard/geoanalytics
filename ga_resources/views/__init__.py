@@ -12,6 +12,9 @@ from .ows import *
 from .rest_data import *
 
 
+
+
+
 def create_page(request):
     models = request.GET['module']
     pageclass = request.GET['classname']

@@ -15,12 +15,13 @@
 # url(r'^(?P<slug>[a-z0-9\-/]+)/', views.CRUDView.as_view()),
 import json
 
-from unittest import TestCase
+from unittest import TestCase, skip
 import requests
 
 AK = '1c6a41ed6a5bc199d10e9594090b17cb83213dbb' # API_KEY
 host = 'http://localhost:8000/'
 
+@skip
 class TestRestAPI(TestCase):
     def assertSuccess(self, response, msg='response status code: {code}\n{response}'):
         msg = msg.format(code=response.status_code, response=response.text)

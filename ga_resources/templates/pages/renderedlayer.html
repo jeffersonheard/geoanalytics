@@ -73,9 +73,10 @@
             };
 
             var wkt = new OpenLayers.Format.WKT(in_options);
-            var feature = wkt.read("{{ page.renderedlayer.data_resource.spatial_metadata.bounding_box.wkt }}");
+            var feature = wkt.read("{{ page.renderedlayer.data_resource.bounding_box.wkt }}");
             var bounds = feature.geometry.getBounds();
 
+            /*
             var wms = new OpenLayers.Layer.WMS('{{ page.renderedlayer.title }}', "/ga_resources/wms/", {
 
                 {% if not request.GET.style %}
@@ -86,7 +87,17 @@
 
                 layers: "{{ page.renderedlayer.slug }}",
                 transparent: true
-            });
+            });*/
+
+            var wms = new OpenLayers.Layer.XYZ("{{ page.renderedlayer.title }}",
+                    [
+                        "/ga_resources/{{page.renderedlayer.slug}}/tms/${z}/${x}/${y}/"
+                    ],
+                    {
+                        transitionEffect: "resize",
+                        isBaseLayer: false
+                    }
+            );
 
 
             var map = new OpenLayers.Map({ div:'map', projection: new OpenLayers.Projection("EPSG:900913")});
