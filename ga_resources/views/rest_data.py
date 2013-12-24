@@ -1,7 +1,6 @@
 from tempfile import NamedTemporaryFile
 from django.contrib.gis.geos import GEOSGeometry
 import pandas
-from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -14,6 +13,7 @@ import json
 from mezzanine.pages.models import Page
 from tastypie.models import ApiKey
 from ga_resources import dispatch
+from ga_resources.utils import authorize
 
 def get_user(request):
     if 'api_key' in request.REQUEST:
@@ -24,38 +24,7 @@ def get_user(request):
     else:
         return request.user
 
-def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):
-    if isinstance(page, basestring):
-        page = Page.objects.get(slug=page).get_content_model()
 
-    user = get_user(request)
-    request.user = user
-    auth = True
-
-    if auth and page is not None:
-        request.user = user
-        if edit:
-            auth = page.can_change(request)
-        if add:
-            auth = auth and page.can_add(request)
-        if delete:
-            auth = auth and page.can_delete(request)
-        elif view:
-            auth = auth and (not hasattr(page, 'can_view')) or \
-                   (auth and hasattr(page, 'can_view') and page.can_view(request))
-
-    if do_raise and not auth:
-        raise PermissionDenied(json.dumps({
-            "error": "Unauthorized",
-            "user": user.email if user.is_authenticated() else None,
-            "page": page.slug if page else None,
-            "edit": edit,
-            "add": add,
-            "delete": delete,
-            "view": view
-        }))
-
-    return user
 
 
 def get_data_page_for_user(user):

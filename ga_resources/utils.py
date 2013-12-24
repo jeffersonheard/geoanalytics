@@ -4,14 +4,48 @@ functions in the module are probably the date manipulation functions.
 
 from collections import namedtuple
 import datetime
+import json
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.forms import MultipleChoiceField, Field
 from django.utils.formats import sanitize_separators
 from osgeo import osr
 import re
 from tastypie.models import ApiKey
 
+
+def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):
+    if isinstance(page, basestring):
+        page = Page.objects.get(slug=page).get_content_model()
+
+    user = get_user(request)
+    request.user = user
+    auth = True
+
+    if auth and page is not None:
+        request.user = user
+        if edit:
+            auth = page.can_change(request)
+        if add:
+            auth = auth and page.can_add(request)
+        if delete:
+            auth = auth and page.can_delete(request)
+        elif view:
+            auth = auth and (not hasattr(page, 'can_view')) or \
+                   (auth and hasattr(page, 'can_view') and page.can_view(request))
+
+    if do_raise and not auth:
+        raise PermissionDenied(json.dumps({
+            "error": "Unauthorized",
+            "user": user.email if user.is_authenticated() else None,
+            "page": page.slug if page else None,
+            "edit": edit,
+            "add": add,
+            "delete": delete,
+            "view": view
+        }))
+
+    return user
 
 def get_user(request):
     """authorize user based on API key if it was passed, otherwise just use the request's user.

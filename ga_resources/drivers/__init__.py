@@ -638,7 +638,7 @@ class CacheManager(object):
     def layer_cache_size(self, layer):
         sz = 0
         c = self.conn.cursor()
-        c.execute('select cache_name from layers where slug=?'. [layer.slug if not isinstance(layer, basestring) else layer])
+        c.execute('select cache_name from layers where slug=?', [layer.slug if not isinstance(layer, basestring) else layer])
         for (k,) in c.fetchall():
             if os.path.exists(k + '.mbtiles'):
                 sz += os.stat(k + '.mbtiles').st_size
@@ -646,7 +646,7 @@ class CacheManager(object):
 
     def resource_cache_size(self, resource):
         return sum(self.layer_cache_size(layer) for layer in
-                   RenderedLayer.objects.filter(
+                   m.RenderedLayer.objects.filter(
                        data_resource__slug =resource if isinstance(resource, basestring) else resource.slug
                    )
         )
@@ -655,7 +655,7 @@ class CacheManager(object):
     def remove_caches_for_resource(self, resource):
         from ga_resources.models import RenderedLayer, DataResource
         """Iterate over all caches using a particular resource and burn them"""
-        for layer in RenderedLayer.objects.filter(data_resource__slug = resource):
+        for layer in m.RenderedLayer.objects.filter(data_resource__slug = resource):
             self.remove_caches_for_layer(layer.slug)
 
 class MBTileCache(object):

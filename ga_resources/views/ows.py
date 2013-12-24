@@ -5,7 +5,7 @@ from ga_ows.views import wms, wfs
 from ga_resources import models, dispatch
 from ga_resources.drivers import shapefile, render, CacheManager
 from ga_resources.models import RenderedLayer
-from ga_resources.views import authorize
+from ga_resources.utils import authorize
 from matplotlib.finance import md5
 from osgeo import osr, ogr
 
