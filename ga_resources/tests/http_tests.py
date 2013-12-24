@@ -21,7 +21,7 @@ import requests
 AK = '1c6a41ed6a5bc199d10e9594090b17cb83213dbb' # API_KEY
 host = 'http://localhost:8000/'
 
-@skip
+# @skip
 class TestRestAPI(TestCase):
     def assertSuccess(self, response, msg='response status code: {code}\n{response}'):
         msg = msg.format(code=response.status_code, response=response.text)

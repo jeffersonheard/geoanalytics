@@ -1,4 +1,5 @@
 # from ga_ows.views import wms, wfs
+from tarfile import TarFile
 from uuid import uuid4
 from zipfile import ZipFile
 from django.contrib.gis.geos import Polygon, GEOSGeometry
@@ -120,6 +121,41 @@ class SpatialiteDriver(Driver):
 
             in_filename = self.get_filename('shp')
             out_filename = self.get_filename('sqlite')
+            if os.path.exists(out_filename):
+                os.unlink(out_filename)
+
+            sh.ogr2ogr(
+                '-skipfailures',
+                '-t_srs', 'epsg:3857',
+                '-f', 'SQLite',
+                '-dsco', 'SPATIALITE=YES',
+                out_filename, in_filename
+            )
+        elif self.src_ext.endswith('gz'):
+            archive = TarFile(self.cached_basename + self.src_ext)
+            projection_found = False
+            for name in archive.getnames():
+                xtn = name.split('.')[-1].lower()
+                if xtn in {'shp', 'shx', 'dbf', 'prj'} and "__MACOSX" not in name:
+                    projection_found = projection_found or xtn == 'prj'
+                    with open(self.cached_basename + '.' + xtn, 'wb') as fout:
+                        with archive.open(name) as fin:
+                            chunk = fin.read(65536)
+                            while chunk:
+                                fout.write(chunk)
+                                chunk = fin.read(65536)
+
+            if not projection_found:
+                with open(self.cached_basename + '.prj', 'w') as f:
+                    srs = osr.SpatialReference()
+                    srs.ImportFromEPSG(4326)
+                    f.write(srs.ExportToWkt())
+
+            in_filename = self.get_filename('shp')
+            out_filename = self.get_filename('sqlite')
+            if os.path.exists(out_filename):
+                os.unlink(out_filename)
+
             sh.ogr2ogr(
                 '-skipfailures',
                 '-t_srs', 'epsg:3857',
@@ -130,6 +166,10 @@ class SpatialiteDriver(Driver):
         elif not self.src_ext.endswith('sqlite'):
             in_filename = self.get_filename(self.src_ext)
             out_filename = self.get_filename('sqlite')
+
+            if os.path.exists(out_filename):
+                os.unlink(out_filename)
+
             sh.ogr2ogr(
                 '-skipfailures',
                 '-t_srs', 'epsg:3857',

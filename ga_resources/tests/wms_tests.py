@@ -13,7 +13,7 @@ class TestWMS(TestCase):
 
 
     def test_GetCapabilities(self):
-        rsp = requests.get('{host}ga_resources/wms'.format(host=host), params={
+        rsp = requests.get('{host}ga_resources/wms/'.format(host=host), params={
             'request' : 'GetCapabilities',
             'version' : '1.1.0',
             'service' : 'WMS'
@@ -22,7 +22,7 @@ class TestWMS(TestCase):
         etree.parse(rsp.text)
 
     def test_GetMap(self):
-        rsp = requests.get('{host}ga_resources/wms'.format(host=host), params={
+        rsp = requests.get('{host}ga_resources/wms/ '.format(host=host), params={
             'request': 'GetMap',
             'version': '1.1.0',
             'service': 'WMS',

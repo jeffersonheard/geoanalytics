@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE WMT_MS_Capabilities SYSTEM "{{STATIC_URL}}/wms/WMS_MS_Capabilities.dtd">
 <WMT_MS_Capabilities version="1.1.1" updateSequence="907">
    <Service>
       <Name>OGC:WMS</Name>

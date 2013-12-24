@@ -1,6 +1,7 @@
 from unittest import TestCase, skip
 from . import utils
 
+@skip
 class TestWMS(TestCase):
     @classmethod
     def setUpClass(cls):

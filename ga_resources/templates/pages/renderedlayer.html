@@ -76,7 +76,7 @@
             var feature = wkt.read("{{ page.renderedlayer.data_resource.bounding_box.wkt }}");
             var bounds = feature.geometry.getBounds();
 
-            /*
+
             var wms = new OpenLayers.Layer.WMS('{{ page.renderedlayer.title }}', "/ga_resources/wms/", {
 
                 {% if not request.GET.style %}
@@ -87,9 +87,9 @@
 
                 layers: "{{ page.renderedlayer.slug }}",
                 transparent: true
-            });*/
+            });
 
-            var wms = new OpenLayers.Layer.XYZ("{{ page.renderedlayer.title }}",
+            var tms = new OpenLayers.Layer.XYZ("{{ page.renderedlayer.title }}",
                     [
                         "/ga_resources/{{page.renderedlayer.slug}}/tms/${z}/${x}/${y}/"
                     ],
@@ -119,10 +119,12 @@
                         "Google Satellite",
                         {type: google.maps.MapTypeId.SATELLITE, numZoomLevels: 22}
                 ),
-                wms
+                tms
             ];
 
             map.addLayers(layers);
+            map.addLayer(wms);
+            map.removeLayer(wms);
             infoControl = new OpenLayers.Control.WMSGetFeatureInfo({
                     url: '/ga_resources/wms/',
                     layers: [wms],

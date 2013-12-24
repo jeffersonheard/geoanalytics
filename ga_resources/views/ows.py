@@ -2,9 +2,10 @@ import json
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from ga_ows.views import wms, wfs
-from ga_resources import models
+from ga_resources import models, dispatch
 from ga_resources.drivers import shapefile, render, CacheManager
 from ga_resources.models import RenderedLayer
+from ga_resources.views import authorize
 from matplotlib.finance import md5
 from osgeo import osr, ogr
 
@@ -37,13 +38,13 @@ class WMSAdapter(wms.WMSAdapterBase):
     def nativesrs(self, layer):
         """Use the resource record to get native SRS"""
         resource = models.RenderedLayer.objects.get(slug=layer).data_resource
-        return resource.spatial_metadata.native_srs
+        return resource.native_srs
 
     def nativebbox(self, layer=None):
         """Use the resource record to get the native bounding box"""
         if layer:
             resource = models.RenderedLayer.objects.get(slug=layer).data_resource
-            return resource.spatial_metadata.native_bounding_box.extent
+            return resource.native_bounding_box.extent
         else:
             return (-180, -90, 180, 90)
 
@@ -83,12 +84,12 @@ class WMSAdapter(wms.WMSAdapterBase):
             ret.append(desc)
             desc["name"] = layer.slug
             desc['title'] = layer.title
-            desc['srs'] = layer.data_resource.spatial_metadata.native_srs
+            desc['srs'] = layer.data_resource.native_srs
             desc['queryable'] = True
             desc['minx'], desc['miny'], desc['maxx'], desc[
-                'maxy'] = layer.data_resource.spatial_metadata.native_bounding_box.extent  # FIXME this is not native
+                'maxy'] = layer.data_resource.native_bounding_box.extent  # FIXME this is not native
             desc['ll_minx'], desc['ll_miny'], desc['ll_maxx'], desc[
-                'll_maxy'] = layer.data_resource.spatial_metadata.bounding_box.extent
+                'll_maxy'] = layer.data_resource.bounding_box.extent
             desc['styles'] = []
             desc['styles'].append({
                 "name": layer.default_style.slug,
@@ -137,8 +138,8 @@ class WFSAdapter(wfs.WFSAdapter):
                 abstract=res.description,
                 title=res.title,
                 keywords=res.keywords,
-                srs=res.spatial_metadata.native_srs,
-                bbox=res.spatial_metadata.bounding_box,
+                srs=res.native_srs,
+                bbox=res.bounding_box,
                 schema=namespace + '/' + res.slug
             )
 
@@ -237,6 +238,26 @@ def tms(request, layer, z, x, y, **kwargs):
     x = int(x)
     y = int(y)
 
-    style = request.GET.get('styles', RenderedLayer.objects.get(slug=layer).default_style.slug)
+    layer = RenderedLayer.objects.get(slug=layer)
+
+    user = authorize(request, page=layer, view=True)
+    dispatch.api_accessed.send(RenderedLayer, instance=layer, user=user)
+    style = request.GET.get('styles', layer.default_style.slug)
     tms = CacheManager.get().get_tile_cache([layer], [style])
     return HttpResponse(tms.fetch_tile(z, x, y), mimetype='image/png')
+
+def seed_layer(request, layer):
+    mnz = int(request.GET['minz'])
+    mxz = int(request.GET['maxz']) # anything greater would cause a DOS attack.  We should do it manually
+    mnx = int(request.GET['minx'])
+    mxx = int(request.GET['maxx'])
+    mny = int(request.GET['miny'])
+    mxy = int(request.GET['maxy'])
+
+    layer = RenderedLayer.objects.get(slug=layer)
+    style = request.GET.get('style', layer.default_style)
+
+    user = authorize(request, page=layer, edit=True)
+    dispatch.api_accessed.send(RenderedLayer, instance=layer, user=user)
+    CacheManager.get().get_tile_cache(layers=[layer], styles=[style]).seed_tiles(mnz, mxz, mnx, mny, mxx, mxy)
+    return HttpResponse()

@@ -4,11 +4,28 @@ functions in the module are probably the date manipulation functions.
 
 from collections import namedtuple
 import datetime
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.forms import MultipleChoiceField, Field
 from django.utils.formats import sanitize_separators
 from osgeo import osr
 import re
+from tastypie.models import ApiKey
+
+
+def get_user(request):
+    """authorize user based on API key if it was passed, otherwise just use the request's user.
+
+    :param request:
+    :return: django.contrib.auth.User
+    """
+    if 'api_key' in request.REQUEST:
+        api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
+        return api_key.user
+    elif request.user.is_authenticated():
+        return User.objects.get(pk=request.user.pk)
+    else:
+        return request.user
 
 def _from_today(match):    
     plusminus = match.group(1)

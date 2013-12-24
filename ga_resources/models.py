@@ -13,12 +13,149 @@ import datetime
 from django.utils.timezone import utc
 from logging import getLogger
 import json
+from .utils import get_user
 
 _log = getLogger('ga_resources')
 
 
-class CatalogPage(Page):
+class PagePermissionsMixin(object):
+    def add_edit_user(self, user):
+        users = {int(k) for k in self.edit_users.split(',')}
+        users.add(user.pk)
+        self.edit_users = ','.join(str(u) for u in users)
+
+
+    def add_view_user(self, user):
+        users = {int(k) for k in self.view_users.split(',')}
+        users.add(user.pk)
+        self.view_users = ','.join(str(u) for u in users)
+
+
+    def add_edit_group(self, group):
+        groups = {int(k) for k in self.edit_groups.split(',')}
+        groups.add(group.pk)
+        self.edit_groups = ','.join(str(u) for u in groups)
+
+
+    def add_view_group(self, group):
+        groups = {int(k) for k in self.view_groups.split(',')}
+        groups.add(group.pk)
+        self.view_groups = ','.join(str(u) for u in groups)
+
+
+    def remove_edit_user(self, user):
+        users = {int(k) for k in self.edit_users.split(',')}
+        users.remove(user.pk)
+        self.edit_users = ','.join(str(u) for u in users)
+
+
+    def remove_view_user(self, user):
+        users = {int(k) for k in self.view_users.split(',')}
+        users.remove(user.pk)
+        self.view_users = ','.join(str(u) for u in users)
+
+
+    def remove_edit_group(self, group):
+        groups = {int(k) for k in self.edit_groups.split(',')}
+        groups.remove(group.pk)
+        self.edit_groups = ','.join(str(u) for u in groups)
+
+
+    def remove_view_group(self, group):
+        groups = {int(k) for k in self.view_groups.split(',')}
+        groups.remove(group.pk)
+        self.view_groups = ','.join(str(u) for u in groups)
+
+
+    def can_add(self, request):
+        user = get_user(request)
+        
+        if user.is_authenticated():
+            if not self.owner:
+                return user.is_superuser
+            elif user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.edit_users.split(',')}
+                groups = {int(k) for k in self.edit_groups.split(',')}
+
+                if len(users) > 0 and user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+
+    def can_delete(self, request):
+        user = get_user(request)
+
+        if user.is_authenticated():
+            if not self.owner:
+                return user.is_superuser
+            elif user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.edit_users.split(',')}
+                groups = {int(k) for k in self.edit_groups.split(',')}
+
+                if len(users) > 0 and user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+
+
+    def can_change(self, request):
+        user = get_user(request)
+
+        if user.is_authenticated():
+            if not self.owner:
+                return user.is_superuser
+            elif user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.edit_users.split(',')}
+                groups = {int(k) for k in self.edit_groups.split(',')}
+
+                if len(users) > 0 and user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+
+
+    def can_view(self, request):
+        user = get_user(request)
+
+        if self.public or not self.owner:
+            return True
+        if user.is_authenticated():
+            if not self.owner:
+                return user.is_superuser
+            elif user.pk == self.owner.pk:
+                return True
+            else:
+                users = {int(k) for k in self.view_users.split(',')}
+                groups = {int(k) for k in self.view_groups.split(',')}
+
+                if len(users) > 0 and user.pk in users:
+                    return True
+                elif len(groups) > 0:
+                    return user.groups.filter(pk__in=groups).exists()
+                else:
+                    return False
+
+class CatalogPage(Page, PagePermissionsMixin):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
+
+    public = models.BooleanField(default=True)
+    owner = models.ForeignKey(User, null=True)
+    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
 
     class Meta:
         ordering = ['title']
@@ -45,9 +182,10 @@ class CatalogPage(Page):
 
         return p
 
-    
 
-class DataResource(Page, RichText):
+
+
+class DataResource(Page, RichText, PagePermissionsMixin):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
     resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
     resource_url = models.URLField(null=True, blank=True)
@@ -59,7 +197,7 @@ class DataResource(Page, RichText):
     md5sum = models.CharField(max_length=64, blank=True, null=True) # the unique md5 sum of the data
     metadata_url = models.URLField(null=True, blank=True)
     metadata_xml = models.TextField(null=True, blank=True)
-    native_bounding_box = models.PolygonField(null=True)
+    native_bounding_box = models.PolygonField(null=True, blank=True)
     bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
     three_d = models.BooleanField(default=False)
     native_srs = models.TextField(null=True, blank=True)
@@ -125,126 +263,6 @@ class DataResource(Page, RichText):
         return json.loads(self.resource_config) if self.resource_config else {}
 
 
-    def add_edit_user(self, user):
-        users = { int(k) for k in self.edit_users.split(',') }        
-        users.add(user.pk)
-        self.edit_users = ','.join(str(u) for u in users)
-
-
-    def add_view_user(self, user):
-        users = { int(k) for k in self.view_users.split(',') }        
-        users.add(user.pk)
-        self.view_users = ','.join(str(u) for u in users)
-
-
-    def add_edit_group(self, group):
-        groups = { int(k) for k in self.edit_groups.split(',') }        
-        groups.add(group.pk)
-        self.edit_groups = ','.join(str(u) for u in groups)
-
-
-    def add_view_group(self, group):
-        groups = { int(k) for k in self.view_groups.split(',') }        
-        groups.add(group.pk)
-        self.view_groups = ','.join(str(u) for u in groups)
-
-
-    def remove_edit_user(self, user):
-        users = {int(k) for k in self.edit_users.split(',')}
-        users.remove(user.pk)
-        self.edit_users = ','.join(str(u) for u in users)
-
-
-    def remove_view_user(self, user):
-        users = {int(k) for k in self.view_users.split(',')}
-        users.remove(user.pk)
-        self.view_users = ','.join(str(u) for u in users)
-
-
-    def remove_edit_group(self, group):
-        groups = {int(k) for k in self.edit_groups.split(',')}
-        groups.remove(group.pk)
-        self.edit_groups = ','.join(str(u) for u in groups)
-
-
-    def remove_view_group(self, group):
-        groups = {int(k) for k in self.view_groups.split(',')}
-        groups.remove(group.pk)
-        self.view_groups = ','.join(str(u) for u in groups)    
-
-
-    def can_add(self, request):
-        if request.user.is_authenticated():
-            if not self.owner:
-                return request.user.is_superuser
-            elif request.user.pk == self.owner.pk:
-                return True
-            else:
-                users = {int(k) for k in self.edit_users.split(',')}
-                groups = {int(k) for k in self.edit_groups.split(',')}
-
-                if len(users) > 0 and request.user.pk in users:
-                    return True
-                elif len(groups) > 0:
-                    return request.user.groups.filter(pk__in=groups).exists()
-                else:
-                    return False
-
-    def can_delete(self, request):
-        if request.user.is_authenticated():
-            if not self.owner:
-                return request.user.is_superuser
-            elif request.user.pk == self.owner.pk:
-                return True
-            else:
-                users = {int(k) for k in self.edit_users.split(',')}
-                groups = {int(k) for k in self.edit_groups.split(',')}
-
-                if len(users) > 0 and request.user.pk in users:
-                    return True
-                elif len(groups) > 0:
-                    return request.user.groups.filter(pk__in=groups).exists()
-                else:
-                    return False
-    
-    
-    def can_change(self, request):
-        if request.user.is_authenticated():
-            if not self.owner:
-                return request.user.is_superuser
-            elif request.user.pk == self.owner.pk:
-                return True
-            else:
-                users = {int(k) for k in self.edit_users.split(',')}
-                groups = {int(k) for k in self.edit_groups.split(',')}
-
-                if len(users) > 0 and request.user.pk in users:
-                    return True
-                elif len(groups) > 0:
-                    return request.user.groups.filter(pk__in=groups).exists()
-                else:
-                    return False
-    
-    
-    def can_view(self, request):
-        if self.public:
-            return True
-        if request.user.is_authenticated():
-            if not self.owner:
-                return request.user.is_superuser
-            elif request.user.pk == self.owner.pk:
-                return True
-            else:
-                users = {int(k) for k in self.view_users.split(',')}
-                groups = {int(k) for k in self.view_groups.split(',')}
-
-                if len(users) > 0 and request.user.pk in users:
-                    return True
-                elif len(groups) > 0:
-                    return request.user.groups.filter(pk__in=groups).exists()
-                else:
-                    return False
-        
         
 
 class OrderedResource(models.Model):
@@ -297,12 +315,18 @@ class RelatedResource(Page, RichText):
             os.makedirs(p)  # just in case it's not there yet.
         return p
 
-class Style(Page):
+class Style(Page, PagePermissionsMixin):
     """A stylesheet in Cascadenik format.  We are switching to Carto shortly."""
     legend = models.ImageField(upload_to='ga_resources.styles.legends', width_field='legend_width', height_field='legend_height', null=True, blank=True)
     legend_width = models.IntegerField(null=True, blank=True)
     legend_height = models.IntegerField(null=True, blank=True)
     stylesheet = models.TextField()
+    public = models.BooleanField(default=True)
+    owner = models.ForeignKey(User, null=True)
+    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
 
     def modified(self):
         print "purging cache for {slug}".format(slug=self.slug)
@@ -314,12 +338,17 @@ class Style(Page):
             s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
 
 
-class RenderedLayer(Page, RichText):
+class RenderedLayer(Page, RichText, PagePermissionsMixin):
     """All the general stuff for a layer.  Layers inherit ownership and group info from the data resource"""
     data_resource = models.ForeignKey(DataResource)
     default_style = models.ForeignKey(Style, related_name='default_for_layer')
     default_class = models.CharField(max_length=255, default='default')
     styles = models.ManyToManyField(Style)
-    cache_seconds = models.PositiveIntegerField(default=60)
+    public = models.BooleanField(default=True)
+    owner = models.ForeignKey(User, null=True)
+    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
+    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
 
 

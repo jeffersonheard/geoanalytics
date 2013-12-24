@@ -4,7 +4,7 @@ import shutil
 from django.utils.timezone import utc
 from collections import OrderedDict
 from hashlib import md5
-from ga_resources import models as m
+from ga_resources import models as m, dispatch
 import os
 from django.conf import settings as s
 import sh
@@ -38,6 +38,8 @@ class Driver(object):
         
     def clear_cache(self):
         shutil.rmtree(self.cache_path, ignore_errors=True)
+
+    def initialize_cache(self):
         os.mkdir(self.cache_path)
 
     def ensure_local_file(self, freshen=False):
@@ -66,6 +68,7 @@ class Driver(object):
         
         if freshen:
             self.clear_cache()
+            self.initialize_cache()
 
         if not ready:
             if self.resource.resource_file:
@@ -89,6 +92,15 @@ class Driver(object):
             return True
         else:
             return False
+
+    def data_size(self):
+        sz = 0
+        if self.resource.resource_file and os.path.exists(self.resource.resource_file):
+            sz += os.stat(self.resource.resource_file).st_size
+        for line in sh.du('-cs', self.cache_path):
+            if line.startswith('.'):
+                sz += int(line.split(' ')[-1])
+
 
     @classmethod
     def supports_mutiple_layers(cls):
@@ -394,7 +406,7 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=True, **kwargs):
     return cached_filename
 
 
-def trim_cache(self, layers=list(), styles=list()):
+def trim_cache(layers=list(), styles=list()):
     """destroy relevant tile caches and cached mapnik files that are affected by a style or layer change"""
     names = []
     data = db.connect(os.path.join(LAYER_CACHE_PATH, 'directory.sqlite'))
@@ -503,15 +515,16 @@ class CacheManager(object):
             cursor = conn.cursor()
             cursor.executescript("""
                 BEGIN TRANSACTION;
-                CREATE TABLE caches (kind text, name text);
-                CREATE TABLE layers (slug text, caches_rowid integer);
-                CREATE TABLE styles (slug text, caches_rowid integer);
-                CREATE TABLE resources (slug text, caches_rowid integer);
-                CREATE INDEX layers_ix ON layers (slug);
-                CREATE INDEX styles_ix ON styles (slug);
-                CREATE INDEX resources_ix on resources (slug);
+                CREATE TABLE caches (name text PRIMARY KEY, kind text);
+                CREATE TABLE layers (slug text primary key, cache_name text);
+                CREATE TABLE styles (slug text primary key, cache_name text);
+                END TRANSACTION;
+                ANALYZE;
+                VACUUM;
             """)
             conn.commit()
+
+        self.conn = conn
 
     @classmethod
     def get(cls):
@@ -525,7 +538,6 @@ class CacheManager(object):
         return cls._mgr.mgr
 
     def get_tile_cache(self, layers, styles, **kwargs):
-        print layers,styles,kwargs
 
         name = cache_entry_name(
             layers,
@@ -535,6 +547,20 @@ class CacheManager(object):
             transparent=kwargs.get('transparent', True),
             query=kwargs.get('query', None)
         )
+        c = self.conn.cursor()
+        c.execute("INSERT OR REPLACE INTO caches (name, kind) VALUES (:name, :kind)", { "name" : name, "kind" : "tile" })
+        for layer in layers:
+            c.execute("INSERT OR REPLACE INTO layers (slug, cache_name) VALUES (:layer, :name)", {
+                "layer" : layer,
+                "name" : name
+            })
+        for style in styles:
+            c.execute("INSERT OR REPLACE INTO styles (slug, cache_name) VALUES (:style, :name)", {
+                "style" : style,
+                "name" : name
+            })
+        self.conn.commit()
+
         if name not in self.tile_caches:
             self.tile_caches[name] = MBTileCache(layers, styles,
                                                  bgcolor=kwargs.get('bgcolor', None),
@@ -561,19 +587,76 @@ class CacheManager(object):
 
     def shave_caches(self, resource, bbox):
         """Iterate over all caches using a particular resource and remove any resources overlapping the bounding box"""
+        c = self.conn.cursor()
+        c.execute('select cache_name from resources where slug=?', [resource.slug])
+        for (k,) in c.fetchall():
+            MBTileCache.shave_cache(k+'.mbtiles', bbox)
 
     def remove_caches_for_layer(self, layer):
         """Iterate over all the caches using a particular layer and burn them"""
+        c = self.conn.cursor()
+        c.execute('select cache_name from layers where slug=?', [layer.slug])
+        for (k,) in c.fetchall():
+            if os.path.exists(k + '.mbtiles'):
+                os.unlink(k + '.mbtiles')
+            if os.path.exists(k + '.json'):
+                os.unlink(k + '.json')
+            if os.path.exists(k + '.wmsresults'):
+                os.unlink(k + '.wmsresults')
+            if os.path.exists(k + '.mml'):
+                os.unlink(k + '.mml')
+            if os.path.exists(k + '.xml'):
+                os.unlink(k + '.xml')
+            if os.path.exists(k + '.carto'):
+                os.unlink(k + '.carto')
+
+            c.execute('delete from caches where name=?', [k])
+            c.execute('delete from layers where cache_name=?', [k])
+            c.execute('delete from styles where cache_name=?', [k])
 
     def remove_caches_for_style(self, style):
         """Iterate over all caches using a particular stylesheet and burn them"""
+        c = self.conn.cursor()
+        c.execute('select cache_name from styles where slug=?', [style.slug])
+        for (k,) in c.fetchall():
+            if os.path.exists(k + '.mbtiles'):
+                os.unlink(k + '.mbtiles')
+            if os.path.exists(k + '.json'):
+                os.unlink(k + '.json')
+            if os.path.exists(k + '.wmsresults'):
+                os.unlink(k + '.wmsresults')
+            if os.path.exists(k + '.mml'):
+                os.unlink(k + '.mml')
+            if os.path.exists(k + '.xml'):
+                os.unlink(k + '.xml')
+            if os.path.exists(k + '.carto'):
+                os.unlink(k + '.carto')
+            c.execute('delete from caches where name=?', [k])
+            c.execute('delete from layers where cache_name=?', [k])
+            c.execute('delete from styles where cache_name=?', [k])
+
+    def layer_cache_size(self, layer):
+        sz = 0
+        c = self.conn.cursor()
+        c.execute('select cache_name from layers where slug=?'. [layer.slug if not isinstance(layer, basestring) else layer])
+        for (k,) in c.fetchall():
+            if os.path.exists(k + '.mbtiles'):
+                sz += os.stat(k + '.mbtiles').st_size
+        return sz
+
+    def resource_cache_size(self, resource):
+        return sum(self.layer_cache_size(layer) for layer in
+                   RenderedLayer.objects.filter(
+                       data_resource__slug =resource if isinstance(resource, basestring) else resource.slug
+                   )
+        )
+
 
     def remove_caches_for_resource(self, resource):
+        from ga_resources.models import RenderedLayer, DataResource
         """Iterate over all caches using a particular resource and burn them"""
-
-    def register_cache(self, layers, styles, name):
-        """inserts a record for every layer, resource, and cache that a cache depends on"""
-
+        for layer in RenderedLayer.objects.filter(data_resource__slug = resource):
+            self.remove_caches_for_layer(layer.slug)
 
 class MBTileCache(object):
     def __init__(self, layers, styles, **kwargs):
@@ -630,7 +713,6 @@ class MBTileCache(object):
                     VACUUM;
                """)
             cursor.close()
-            CacheManager.get().register_cache(layers, styles, self.cachename)
 
         self.cache = conn
 
@@ -648,6 +730,7 @@ class MBTileCache(object):
         try:
             blob = buffer(c.fetchone()[0])
         except:
+            dispatch.tile_rendered.send(sender=CacheManager, layers=self.layers, styles=self.styles)
             _, blob = render('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs)
             if len(blob) > 350:
                 d = self.cache.cursor()
@@ -659,10 +742,12 @@ class MBTileCache(object):
 
         return blob
 
-    def seed_tiles(self, min_zoom, max_zoom):
+    def seed_tiles(self, min_zoom, max_zoom, minx, miny, maxx, maxy):
         for z in range(min_zoom, max_zoom+1):
-            for x in range(0, 2**z):
-                for y in range(0, 2**z):
+            mnx, mny = deg2num(miny, minx, z)
+            mxx, mxy = deg2num(maxy, maxx, z)
+            for x in range(mnx, mxx+1):
+                for y in range(mny, mxy+1):
                     self.fetch_tile(z, x, y)
 
     @classmethod
@@ -702,13 +787,20 @@ class MBTileCache(object):
                 zoom_level = ?
         )
         """
-        for zoom in range(min_zoom, max_zoom+1):
-            a1, b1 = deg2num(x1, y1, zoom)
-            a2, b2 = deg2num(x2, y2, zoom)
-            c.execute(del_tile_data, a1, b1, a2, b2, zoom)
-            c.execute(del_map_entry, a1, b1, a2, b2, zoom)
+        e4326 = osr.SpatialReference()
+        e3857 = osr.SpatialReference()
+        e4326.ImportFromEPSG(4326)
+        e3857.ImportFromEPSG(900913)
+        crx = osr.CoordinateTransformation(e3857, e4326)
+        x1, y1, _ = crx.TransformPoint(x1, y1)
+        x2, y2, _ = crx.TransformPoint(x2, y2)
 
-        c.execute('END TRANSACTION')
+        for zoom in range(min_zoom, max_zoom+1):
+            a1, b1 = deg2num(y1, x1, zoom)
+            a2, b2 = deg2num(y2, x2, zoom)
+            c.execute(del_tile_data, [a1, b1, a2, b2, zoom])
+            c.execute(del_map_entry, [a1, b1, a2, b2, zoom])
+
         c.execute('ANALYZE')
         c.execute('VACCUM')
 
@@ -797,8 +889,10 @@ class WMSResultsCache(object):
         try:
             blob = c.fetchone()[0]
         except:
+            dispatch.wms_rendered.send(CacheManager, layers=self.layers, styles=self.styles)
             tile_id, blob = render('png', width, height, bbox, self.srs, self.styles,
                                    self.layers, **self.kwargs)
+
             with self.cache.cursor() as d:
                 d.execute(insert_data, filename, blob)
         return blob

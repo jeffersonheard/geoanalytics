@@ -8,7 +8,7 @@ from osgeo import osr
 import pandas
 from shapely.wkt import geom_from_wkt
 
-@skip
+#@skip
 class SpatialiteTest(TestCase):
     @classmethod
     def setUpClass(cls):
