@@ -1,7 +1,6 @@
 from django.contrib.auth.models import User
 from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
-from mezzanine.core.managers import SearchableManager
 from django.contrib.gis.db import models
 from django.conf import settings as s
 import importlib
@@ -19,91 +18,71 @@ _log = getLogger('ga_resources')
 
 
 class PagePermissionsMixin(object):
+    def storage_key(self, kfor):
+        return "{label}.{model}.{key}.{kfor}".format(
+            label=self._meta.app_label,
+            model=self._meta.module_name,
+            key=self.pk,
+            kfor=kfor
+        )
+
+    @property
+    def permissions_store(self):
+        return s.PERMISSIONS_DB
+
+    @property
+    def edit_users(self):
+        return set(self.permissions_store.smembers(self.storage_key('edit-users')))
+
+    @property
+    def edit_groups(self):
+        return set(self.permissions_store.smembers(self.storage_key('edit-groups')))
+
+    @property
+    def view_users(self):
+        return set(self.permissions_store.smembers(self.storage_key('view-users')))
+
+    @property
+    def view_groups(self):
+        return set(self.permissions_store.smembers(self.storage_key('view-groups')))
+
+
     def add_edit_user(self, user):
-        users = {int(k) for k in self.edit_users.split(',')}
-        users.add(user.pk)
-        self.edit_users = ','.join(str(u) for u in users)
+        self.permissions_store.sadd(self.storage_key('edit-users'), user.pk)
 
 
     def add_view_user(self, user):
-        users = {int(k) for k in self.view_users.split(',')}
-        users.add(user.pk)
-        self.view_users = ','.join(str(u) for u in users)
+        self.permissions_store.sadd(self.storage_key('view-users'), user.pk)
 
 
     def add_edit_group(self, group):
-        groups = {int(k) for k in self.edit_groups.split(',')}
-        groups.add(group.pk)
-        self.edit_groups = ','.join(str(u) for u in groups)
+        self.permissions_store.sadd(self.storage_key('edit-groups'), group.pk)
 
 
     def add_view_group(self, group):
-        groups = {int(k) for k in self.view_groups.split(',')}
-        groups.add(group.pk)
-        self.view_groups = ','.join(str(u) for u in groups)
+        self.permissions_store.sadd(self.storage_key('view-groups'), group.pk)
 
 
     def remove_edit_user(self, user):
-        users = {int(k) for k in self.edit_users.split(',')}
-        users.remove(user.pk)
-        self.edit_users = ','.join(str(u) for u in users)
+        self.permissions_store.srem(self.storage_key('edit-users'), user.pk)
 
 
     def remove_view_user(self, user):
-        users = {int(k) for k in self.view_users.split(',')}
-        users.remove(user.pk)
-        self.view_users = ','.join(str(u) for u in users)
+        self.permissions_store.srem(self.storage_key('view-users'), user.pk)
 
 
     def remove_edit_group(self, group):
-        groups = {int(k) for k in self.edit_groups.split(',')}
-        groups.remove(group.pk)
-        self.edit_groups = ','.join(str(u) for u in groups)
+        self.permissions_store.srem(self.storage_key('edit-groups'), group.pk)
 
 
     def remove_view_group(self, group):
-        groups = {int(k) for k in self.view_groups.split(',')}
-        groups.remove(group.pk)
-        self.view_groups = ','.join(str(u) for u in groups)
-
+        self.permissions_store.srem(self.storage_key('view-groups'), group.pk)
 
     def can_add(self, request):
-        user = get_user(request)
-        
-        if user.is_authenticated():
-            if not self.owner:
-                return user.is_superuser
-            elif user.pk == self.owner.pk:
-                return True
-            else:
-                users = {int(k) for k in self.edit_users.split(',')}
-                groups = {int(k) for k in self.edit_groups.split(',')}
-
-                if len(users) > 0 and user.pk in users:
-                    return True
-                elif len(groups) > 0:
-                    return user.groups.filter(pk__in=groups).exists()
-                else:
-                    return False
+        return self.can_change(request)
 
     def can_delete(self, request):
-        user = get_user(request)
-
-        if user.is_authenticated():
-            if not self.owner:
-                return user.is_superuser
-            elif user.pk == self.owner.pk:
-                return True
-            else:
-                users = {int(k) for k in self.edit_users.split(',')}
-                groups = {int(k) for k in self.edit_groups.split(',')}
-
-                if len(users) > 0 and user.pk in users:
-                    return True
-                elif len(groups) > 0:
-                    return user.groups.filter(pk__in=groups).exists()
-                else:
-                    return False
+        return self.can_change(request)
 
 
     def can_change(self, request):
@@ -115,8 +94,8 @@ class PagePermissionsMixin(object):
             elif user.pk == self.owner.pk:
                 return True
             else:
-                users = {int(k) for k in self.edit_users.split(',')}
-                groups = {int(k) for k in self.edit_groups.split(',')}
+                users = self.edit_users
+                groups = self.edit_groups
 
                 if len(users) > 0 and user.pk in users:
                     return True
@@ -124,6 +103,8 @@ class PagePermissionsMixin(object):
                     return user.groups.filter(pk__in=groups).exists()
                 else:
                     return False
+        else:
+            return False
 
 
     def can_view(self, request):
@@ -137,8 +118,8 @@ class PagePermissionsMixin(object):
             elif user.pk == self.owner.pk:
                 return True
             else:
-                users = {int(k) for k in self.view_users.split(',')}
-                groups = {int(k) for k in self.view_groups.split(',')}
+                users = self.view_users
+                groups = self.view_groups
 
                 if len(users) > 0 and user.pk in users:
                     return True
@@ -146,16 +127,15 @@ class PagePermissionsMixin(object):
                     return user.groups.filter(pk__in=groups).exists()
                 else:
                     return False
+        else:
+            return False
+
 
 class CatalogPage(Page, PagePermissionsMixin):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
 
     public = models.BooleanField(default=True)
     owner = models.ForeignKey(User, null=True)
-    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
 
     class Meta:
         ordering = ['title']
@@ -203,11 +183,7 @@ class DataResource(Page, RichText, PagePermissionsMixin):
     native_srs = models.TextField(null=True, blank=True)
     public = models.BooleanField(default=True)
     owner = models.ForeignKey(User, null=True)
-    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True )
-    
+
     driver = models.CharField(
         default='ga_resources.drivers.spatialite',
         max_length=255,
@@ -316,17 +292,13 @@ class RelatedResource(Page, RichText):
         return p
 
 class Style(Page, PagePermissionsMixin):
-    """A stylesheet in Cascadenik format.  We are switching to Carto shortly."""
+    """A stylesheet in CartoCSS format."""
     legend = models.ImageField(upload_to='ga_resources.styles.legends', width_field='legend_width', height_field='legend_height', null=True, blank=True)
     legend_width = models.IntegerField(null=True, blank=True)
     legend_height = models.IntegerField(null=True, blank=True)
     stylesheet = models.TextField()
     public = models.BooleanField(default=True)
     owner = models.ForeignKey(User, null=True)
-    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
 
     def modified(self):
         print "purging cache for {slug}".format(slug=self.slug)
@@ -346,9 +318,5 @@ class RenderedLayer(Page, RichText, PagePermissionsMixin):
     styles = models.ManyToManyField(Style)
     public = models.BooleanField(default=True)
     owner = models.ForeignKey(User, null=True)
-    edit_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_users = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    edit_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
-    view_groups = models.CommaSeparatedIntegerField(max_length=2048, default='', blank=True)
 
 

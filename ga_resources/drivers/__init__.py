@@ -5,6 +5,7 @@ from django.utils.timezone import utc
 from collections import OrderedDict
 from hashlib import md5
 from ga_resources import models as m, dispatch
+from ga_resources.models import DataResource
 import os
 from django.conf import settings as s
 import sh
@@ -95,11 +96,12 @@ class Driver(object):
 
     def data_size(self):
         sz = 0
-        if self.resource.resource_file and os.path.exists(self.resource.resource_file):
-            sz += os.stat(self.resource.resource_file).st_size
+        if self.resource.resource_file and os.path.exists(self.resource.resource_file.path):
+            sz += os.stat(self.resource.resource_file.path).st_size
         for line in sh.du('-cs', self.cache_path):
             if line.startswith('.'):
                 sz += int(line.split(' ')[-1])
+        return sz
 
 
     @classmethod
@@ -551,12 +553,12 @@ class CacheManager(object):
         c.execute("INSERT OR REPLACE INTO caches (name, kind) VALUES (:name, :kind)", { "name" : name, "kind" : "tile" })
         for layer in layers:
             c.execute("INSERT OR REPLACE INTO layers (slug, cache_name) VALUES (:layer, :name)", {
-                "layer" : layer,
+                "layer" : layer if isinstance(layer, basestring) else layer.slug,
                 "name" : name
             })
         for style in styles:
             c.execute("INSERT OR REPLACE INTO styles (slug, cache_name) VALUES (:style, :name)", {
-                "style" : style,
+                "style" : style if isinstance(style, basestring) else style.slug,
                 "name" : name
             })
         self.conn.commit()
@@ -587,10 +589,15 @@ class CacheManager(object):
 
     def shave_caches(self, resource, bbox):
         """Iterate over all caches using a particular resource and remove any resources overlapping the bounding box"""
-        c = self.conn.cursor()
-        c.execute('select cache_name from resources where slug=?', [resource.slug])
-        for (k,) in c.fetchall():
-            MBTileCache.shave_cache(k+'.mbtiles', bbox)
+
+
+        if isinstance(resource, basestring):
+            resource = DataResource.objects.get(slug=resource)
+        for layer in resource.renderedlayer_set.all():
+            c = self.conn.cursor()
+            c.execute('select cache_name from layers where slug=?', [layer.slug])
+            for (k,) in c.fetchall():
+                MBTileCache.shave_cache(k+'.mbtiles', bbox.extent)
 
     def remove_caches_for_layer(self, layer):
         """Iterate over all the caches using a particular layer and burn them"""
@@ -759,19 +766,28 @@ class MBTileCache(object):
         c = conn.cursor()
         c.execute('select min(zoom_level) from map')
         c.execute('select max(zoom_level) from map')
-        min_zoom = c.fetchone()[0]
-        max_zoom = c.fetchone()[0]
+        min_zoom = c.fetchone()
+        max_zoom = c.fetchone()
+
+        if min_zoom:
+            min_zoom = min_zoom[0]
+        else:
+            min_zoom = 0
+        if max_zoom:
+            max_zoom = max_zoom[0]
+        else:
+            max_zoom = 32
+
         c.close()
 
         c = conn.cursor()
-        c.execute('BEGIN TRANSACTION')
 
         del_map_entry = """
         DELETE FROM map WHERE
-            tile_row >= ? AND
             tile_column >= ? AND
-            tile_row <= ? AND
+            tile_row >= ? AND
             tile_column <= ? AND
+            tile_row <= ? AND
             zoom_level = ?
         """
 
@@ -780,10 +796,10 @@ class MBTileCache(object):
         WHERE tile_id IN (
             SELECT tile_id
             FROM map WHERE
-                tile_row >= ? AND
                 tile_column >= ? AND
-                tile_row <= ? AND
+                tile_row >= ? AND
                 tile_column <= ? AND
+                tile_row <= ? AND
                 zoom_level = ?
         )
         """
@@ -798,12 +814,14 @@ class MBTileCache(object):
         for zoom in range(min_zoom, max_zoom+1):
             a1, b1 = deg2num(y1, x1, zoom)
             a2, b2 = deg2num(y2, x2, zoom)
+            print 'deleting tiles from {a1},{b1} - {a2},{b2} for {zoom}'.format(**locals())
             c.execute(del_tile_data, [a1, b1, a2, b2, zoom])
             c.execute(del_map_entry, [a1, b1, a2, b2, zoom])
 
         c.execute('ANALYZE')
-        c.execute('VACCUM')
+        c.execute('VACUUM')
 
+        conn.commit()
         conn.close()
 
 

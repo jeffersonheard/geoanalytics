@@ -8,11 +8,42 @@ import json
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.forms import MultipleChoiceField, Field
+from django.http import HttpResponse
 from django.utils.formats import sanitize_separators
+from mezzanine.pages.models import Page
 from osgeo import osr
 import re
 from tastypie.models import ApiKey
 
+
+def json_or_jsonp(r, i, code=200):
+    if not isinstance(i, basestring):
+        i = json.dumps(i)
+
+    if 'callback' in r.REQUEST:
+        return HttpResponse('{c}({i})'.format(c=r.REQUEST['callback'], i=i), mimetype='text/javascript')
+    elif 'jsonp' in r.REQUEST:
+        return HttpResponse('{c}({i})'.format(c=r.REQUEST['jsonp'], i=i), mimetype='text/javascript')
+    else:
+        return HttpResponse(i, mimetype='application/json', status=code)
+
+
+def get_data_page_for_user(user):
+    from ga_resources.models import CatalogPage
+    p = CatalogPage.ensure_page(user.username, "Datasets")
+    return p
+
+
+def get_layer_page_for_user(user):
+    from ga_resources.models import CatalogPage
+    p = CatalogPage.ensure_page(user.username, "Layers")
+    return p
+
+
+def get_stylesheet_page_for_user(user):
+    from ga_resources.models import CatalogPage
+    p = CatalogPage.ensure_page(user.username, "Stylesheets")
+    return p
 
 def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):
     if isinstance(page, basestring):

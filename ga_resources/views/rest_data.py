@@ -13,7 +13,8 @@ import json
 from mezzanine.pages.models import Page
 from tastypie.models import ApiKey
 from ga_resources import dispatch
-from ga_resources.utils import authorize
+from ga_resources.utils import authorize, get_data_page_for_user, json_or_jsonp
+
 
 def get_user(request):
     if 'api_key' in request.REQUEST:
@@ -26,22 +27,6 @@ def get_user(request):
 
 
 
-
-def get_data_page_for_user(user):
-    p = CatalogPage.ensure_page(user.username, "datasets")
-    return p
-
-
-def json_or_jsonp(r, i, code=200):
-    if not isinstance(i, basestring):
-        i = json.dumps(i)
-
-    if 'callback' in r.REQUEST:
-        return HttpResponse('{c}({i})'.format(c=r.REQUEST['callback'], i=i), mimetype='text/javascript')
-    elif 'jsonp' in r.REQUEST:
-        return HttpResponse('{c}({i})'.format(c=r.REQUEST['jsonp'], i=i), mimetype='text/javascript')
-    else:
-        return HttpResponse(i, mimetype='application/json', status=code)
 
 def create_dataset(request):
     user = authorize(request)
@@ -181,12 +166,19 @@ def add_row(request, slug=None, *args, **kwargs):
     schema = {k for k in ds.driver_instance.schema()}
     row = {k: v for k, v in request.REQUEST.items() if k in schema}
 
-    ds.driver_instance.add_row(**row)
+    try:
+        payload = json.loads(request.body)
+        for k in [x for x in payload if x in schema]:
+            row[k] = payload[k]
+    except:
+        pass # just in case there's JSON in the payuload
+
+    new_rec = ds.driver_instance.add_row(**row)
     bbox = GEOSGeometry(row['GEOMETRY']).envelope
 
     dispatch.api_accessed.send(sender=DataResource, instance=ds, user=user)
     dispatch.features_created.send(sender=DataResource, instance=ds, user=user, count=1, bbox=bbox)
-    return HttpResponse(status=201)
+    return json_or_jsonp(request, new_rec, code=201)
 
 @csrf_exempt
 def update_row(request, slug=None, ogc_fid=None, *args, **kwargs):
@@ -195,12 +187,23 @@ def update_row(request, slug=None, ogc_fid=None, *args, **kwargs):
 
     schema = {k for k in ds.driver_instance.schema()}
     row = { k : v for k, v in request.REQUEST.items() if k in schema }
+    try:
+        payload = json.loads(request.body)
+        for k in [x for x in payload if x in schema]:
+            row[k] = payload[k]
+    except:
+        pass # just in case there's JSON in the payuload
+
+    print json.dumps(row, indent=4)
+
+    if ogc_fid is None:
+        ogc_fid = row['OGC_FID']
 
     bbox = GEOSGeometry(ds.driver_instance.get_row(int(ogc_fid), geometry_format='wkt')['GEOMETRY']).envelope
-    ds.driver_instance.update_row(int(ogc_fid), **row)
+    result = ds.driver_instance.update_row(int(ogc_fid), **row)
     dispatch.api_accessed.send(sender=DataResource, instance=ds, user=user)
     dispatch.features_updated.send(sender=DataResource, instance=ds, user=user, count=1, fid=ogc_fid, bbox=bbox)
-    return HttpResponse()
+    return json_or_jsonp(request, result)
 
 @csrf_exempt
 def delete_row(request, slug=None, ogc_fid=None, *args, **kwargs):
@@ -220,7 +223,10 @@ def get_row(request, slug=None, ogc_fid=None, *args, **kwargs):
     user = authorize(request, ds, view=True)
 
     format = request.REQUEST.get('format', 'wkt')
-    row = ds.driver_instance.get_row(int(ogc_fid), geometry_format=format)
+    try:
+        row = ds.driver_instance.get_row(int(ogc_fid), geometry_format=format)
+    except:
+        row = None
 
     dispatch.api_accessed.send(sender=DataResource, instance=ds, user=user)
     dispatch.features_retrieved.send(sender=DataResource, instance=ds, user=user, count=1, fid=ogc_fid)
@@ -312,8 +318,8 @@ class CRUDView(View):
         return add_row(request, kwargs['slug'])
 
     def put(self, request, *args, **kwargs):
-        return update_row(request, kwargs['slug'], kwargs['ogc_fid'])
+        return update_row(request, kwargs['slug'], kwargs.get('ogc_fid', None))
 
     def delete(self, request, *args, **kwargs):
-        return delete_row(request, kwargs['slug'], kwargs['ogc_fid'])
+        return delete_row(request, kwargs['slug'], kwargs.get('ogc_fid', None))
 

@@ -238,11 +238,16 @@ def tms(request, layer, z, x, y, **kwargs):
     x = int(x)
     y = int(y)
 
-    layer = RenderedLayer.objects.get(slug=layer)
+    table = None
+    if '#' in layer:
+        layer_slug, table = layer.split('#')
+    else:
+        layer_slug = layer
+    layer_instance = RenderedLayer.objects.get(slug=layer_slug)
 
     user = authorize(request, page=layer, view=True)
-    dispatch.api_accessed.send(RenderedLayer, instance=layer, user=user)
-    style = request.GET.get('styles', layer.default_style.slug)
+    dispatch.api_accessed.send(RenderedLayer, instance=layer_instance, user=user)
+    style = request.GET.get('styles', layer_instance.default_style.slug)
     tms = CacheManager.get().get_tile_cache([layer], [style])
     return HttpResponse(tms.fetch_tile(z, x, y), mimetype='image/png')
 

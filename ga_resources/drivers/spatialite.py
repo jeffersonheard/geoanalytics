@@ -49,7 +49,8 @@ class SpatialiteDriver(Driver):
         conn = {
             'type': 'sqlite',
             'file': self.get_filename('sqlite'),
-            'extent': self.resource.native_bounding_box.extent,
+            'extent': [-20037508.34, -20037508.34,
+                       20037508.34, 20037508.34], # self.resource.native_bounding_box.extent,
             'wkb_format' : 'spatialite'
         }
 
@@ -475,17 +476,26 @@ class SpatialiteDriver(Driver):
             values=parms
         )
         c.execute(insert_stmt, vals)
+        c.execute('SELECT max(OGC_FID) from {table}'.format(table=self._tablename))
+        new_id = c.fetchone()[0]
         c.close()
         self._conn.commit()
+        return self.get_row(ogc_fid=new_id, geometry_format='wkt')
 
     def update_row(self, ogc_fid, **values):
         c = self._cursor()
         insert_stmt = 'update {table} set {set_clause} where OGC_FID={ogc_fid}'
         table = self._tablename
-        set_clause = ','.join(["{key}=:{key}".format(key=key) if key != self._geometry_field else 'key=GeomFromText(:{key})' for key in values.keys()])
+        if 'OGC_FID' in values:
+            del values['OGC_FID']
+
+        set_clause = ','.join(["{key}=:{key}".format(key=key) if key != self._geometry_field else '{key}=GeomFromText(:{key}, {srid})'.format(key=key, srid=self._srid if "srid" not in values else
+        values['srid']) for key in values.keys()])
+
         c.execute(insert_stmt.format(**locals()), values)
         c.close()
         self._conn.commit()
+        return self.get_row(ogc_fid=ogc_fid, geometry_format='wkt')
 
     def get_row(self, ogc_fid, geometry_format='geojson'):
         c = self._cursor()
@@ -497,6 +507,7 @@ class SpatialiteDriver(Driver):
         select2 = 'select AsBinary({geometry}) from {table} where OGC_FID={ogc_fid}'.format(**locals())
 
         c.execute("select load_extension('libspatialite.so')")
+        values = c.execute(select).fetchone()
         record = dict(p for p in zip(keys, c.execute(select).fetchone()) if p[0] != geometry)
         geo = c.execute(select2).fetchone()
         # gj = { 'type' : 'feature', 'geometry' : json.loads(geojson.dumps(wkb.loads(str(geo[0])))), 'properties' : record }
@@ -505,7 +516,6 @@ class SpatialiteDriver(Driver):
             gj[self._geometry_field] = json.loads(geojson.dumps(wkb.loads(str(geo[0]))))
         elif geometry_format.lower() == 'wkt':
             gj[self._geometry_field] = wkb.loads(str(geo[0])).wkt
-
 
         return gj
 

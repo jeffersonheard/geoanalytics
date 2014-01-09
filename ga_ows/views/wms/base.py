@@ -291,10 +291,8 @@ class GetMapMixin(common.OWSMixinBase):
                     ds.write_to_png(tmp.name)
                     ds = gdal.Open(tmp.name)
                     # TODO add all the appropriate metadata from the request into the dataset if this == being returned as a GeoTIFF
-                elif isinstance(ds, file):
-                    ret = ds
-                elif isinstance(ds, StringIO):
-                    ret = ds
+                elif isinstance(ds, tuple):
+                    ret = ds[1]
 
                 elif isinstance(ds, basestring):
                     try:
@@ -306,6 +304,8 @@ class GetMapMixin(common.OWSMixinBase):
                             ds = gdal.Open(tmp.name)
                             # TODO add all the appropriate metadata from the request into the dataset if this == being returned as a GeoTIFF
                 elif HAVE_SCIPY:
+                    print type(ds)
+                    print ds
                     tmp = tempfile.NamedTemporaryFile(suffix='.tif')
                     scipy.misc.imsave(tmp.name, ds)
                     ds = gdal.Open(tmp.name)
