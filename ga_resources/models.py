@@ -151,16 +151,19 @@ class CatalogPage(Page, PagePermissionsMixin):
     def ensure_page(cls, *titles, **kwargs):
         parent = kwargs.get('parent', None)
         child = kwargs.get('child', None)
-        p, created = cls.objects.get_or_create(title=titles[0], parent=parent)
+        p, created = cls.objects.get_or_create(title=titles[0], parent=parent, **kwargs)
 
         for title in titles[1:]:
-            p, created = cls.objects.get_or_create(title=title, parent=p)
+            p, created = cls.objects.get_or_create(title=title, parent=p, **kwargs)
 
         if child:
             child.parent = p
             child.save()
 
         return p
+
+    def save(self, *args, **kwargs):
+        return super(CatalogPage, self).save(*args, **kwargs)
 
 
 
@@ -318,5 +321,3 @@ class RenderedLayer(Page, RichText, PagePermissionsMixin):
     styles = models.ManyToManyField(Style)
     public = models.BooleanField(default=True)
     owner = models.ForeignKey(User, null=True)
-
-

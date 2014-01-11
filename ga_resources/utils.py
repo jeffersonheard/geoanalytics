@@ -30,19 +30,19 @@ def json_or_jsonp(r, i, code=200):
 
 def get_data_page_for_user(user):
     from ga_resources.models import CatalogPage
-    p = CatalogPage.ensure_page(user.username, "Datasets")
+    p = CatalogPage.ensure_page(user.username, "Datasets", in_menus=[5])
     return p
 
 
 def get_layer_page_for_user(user):
     from ga_resources.models import CatalogPage
-    p = CatalogPage.ensure_page(user.username, "Layers")
+    p = CatalogPage.ensure_page(user.username, "Layers", in_menus=[6])
     return p
 
 
 def get_stylesheet_page_for_user(user):
     from ga_resources.models import CatalogPage
-    p = CatalogPage.ensure_page(user.username, "Stylesheets")
+    p = CatalogPage.ensure_page(user.username, "Stylesheets", in_menus=[7])
     return p
 
 def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):
