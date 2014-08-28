@@ -1,0 +1,6 @@
+[submodule "ga_ows"]
+	path = ga_ows
+	url = https://github.com/JeffHeard/ga_ows.git
+[submodule "ga_resources"]
+	path = ga_resources
+	url = https://github.com/JeffHeard/ga_resources.git

@@ -14,7 +14,7 @@ geoanalytics:
     POSTGIS_PASSWORD: postgres
     PGPASSWORD: postgres
   volumes:
-    - "media:/home/docker/geoanalytics/terrahub/static/media"
+    - "media:/home/docker/geoanalytics/geoanalytics/static/media"
     - "logs:/home/docker/logs"
   ports:
     - "0.0.0.0:8000:80"

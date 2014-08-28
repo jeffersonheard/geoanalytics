@@ -51,23 +51,6 @@ CELERYD_TASK_SOFT_TIME_LIMIT = 15
 # carto settings
 CARTO_HOME='/home/docker/node_modules/carto'
 
-# user profile
-AUTH_PROFILE_MODULE = 'th_theme.UserProfile'
-ACCOUNTS_PROFILE_FORM_EXCLUDE_FIELDS = (
-    "room_quota",
-    "request_quota",
-    "storage_quota",
-    "service_quota",
-    "usage_quota",
-    "storage_used",
-    "stripe_token",
-    "last_four_digits"
-)
-
-# A list of installed Terrahub Apps
-ACCOUNTS_NO_USERNAME = False
-PAGES_MENU_SHOW_ALL = False
-
 ######################
 # MEZZANINE SETTINGS #
 ######################
@@ -372,7 +355,6 @@ MIDDLEWARE_CLASSES = (
     "mezzanine.pages.middleware.PageMiddleware",
     "mezzanine.core.middleware.FetchFromCacheMiddleware",
     "ga_resources.middleware.PagePermissionsViewableMiddleware",
-    "th_admin.quotas.QuotaMiddleware",
 )
 
 # Store these package names here as they may change in the future since
