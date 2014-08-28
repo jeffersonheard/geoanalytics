@@ -74,13 +74,7 @@ a number of reusable apps that work in concert:
   WFS web services that provide OGC standard ways of accessing and visualizing
   datasets on a map or providing them to be consumed GIS or analytics systems
   like Arc, SAS, or qGIS.
-* ga\_interactive : An interactive shell built on IPython Notebook that allows
-  power users (analysts and so on) to hack the system from inside a
-  web-browser, analyzing data using high-performance libraries, the GRASS GIS,
-  or other libraries.
 * ga\_ows : WMS and WFS webservice code that can be adapted to projects.
-* ga\_irods : A connection to the [IRODS](http://www.irods.org) data grid
-  software for distributed computing and policy based data storage
 
 ## Licensing
 
