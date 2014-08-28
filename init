@@ -1,0 +1,10 @@
+#!/bin/bash
+
+psql -U postgres -h postgis -w -c 'create extension postgis;'
+echo "Made sure postgis was enabled on PostgreSQL"
+python manage.py syncdb --noinput
+python manage.py create_site
+python manage.py migrate
+mkdir /var/run/sshd
+/usr/sbin/sshd
+python manage.py runserver 0.0.0.0:80

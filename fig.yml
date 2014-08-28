@@ -1,0 +1,44 @@
+postgis:
+  image: jamesbrink/postgresql
+redis:
+  image: dockerfile/redis
+geoanalytics:
+  build: .
+  environment:
+    POSTGIS_HOST_NAME: postgis
+    POSTGIS_PORT_NAME: 5432
+    REDIS_HOST_NAME: redis
+    REDIS_PORT_NAME: 6379
+    POSTGIS_DB: postgres
+    POSTGIS_USER: postgres
+    POSTGIS_PASSWORD: postgres
+    PGPASSWORD: postgres
+  volumes:
+    - "media:/home/docker/geoanalytics/terrahub/static/media"
+    - "logs:/home/docker/logs"
+  ports:
+    - "0.0.0.0:8000:80"
+    - "0.0.0.0:1338:22"
+  links:
+    - postgis:postgis
+    - redis:redis
+  command: /bin/bash init
+worker:
+  build: .
+  environment:
+    C_FORCE_ROOT: 1
+    POSTGIS_HOST_NAME: postgis
+    POSTGIS_PORT_NAME: 5432
+    REDIS_HOST_NAME: redis
+    REDIS_PORT_NAME: 6379
+    POSTGIS_DB: postgres
+    POSTGIS_USER: postgres
+    POSTGIS_PASSWORD: postgres
+    PGPASSWORD: postgres
+  volumes_from:
+    - geoanalytics
+  links:
+    - postgis:postgis
+    - redis:redis
+  command: celery worker -A geoanalytics -E
+
