@@ -8,11 +8,18 @@
 Geoanalytics. The simplest path to Geoanalytics is through [Docker](http://docker.io). Install Docker and [fig](http://fig.sh). Once you have Docker and fig installed:
 
 ```shell
-$ cd ga_base
+# boot2docker init if this is the first time you are running docker
+$ boot2docker up
+# export DOCKER_HOST=<url given in the output of boot2docker up>
+$ git clone https://github.com/JeffHeard/geoanalytics.git
+$ cd geoanalytics/ga_base
 $ docker build -t ga_base .
 $ cd ..
+$ git submodule init
+$ git submodule update
+$ fig build
 $ fig up -d
-# create a root user for logging into the admin site.
+# the following will create a root user for logging into the admin site
 $ fig run --rm geoanalytics python manage.py createsuperuser
 ```
 
