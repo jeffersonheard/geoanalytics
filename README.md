@@ -7,7 +7,7 @@
 
 Geoanalytics. The simplest path to Geoanalytics is through [Docker](http://docker.io). Install Docker and [fig](http://fig.sh). Once you have Docker and fig installed:
 
-```shell
+```sh
 # boot2docker init # if this is the first time you are running docker
 $ boot2docker up
 # export DOCKER_HOST=<url given in the output of boot2docker up>
