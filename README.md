@@ -3,6 +3,21 @@
 #### _Content, Collaboration, and Analytics for Geography._
 [See user, administrator, and developer documentation in the wiki](https://github.com/JeffHeard/geoanalytics/wiki)
 
+## Install
+
+Geoanalytics. The simplest path to Geoanalytics is through [Docker](http://docker.io). Install Docker and [fig](http://fig.sh). Once you have Docker and fig installed:
+
+```shell
+$ cd ga_base
+$ docker build -t ga_base .
+$ cd ..
+$ fig up -d
+# create a root user for logging into the admin site.
+$ fig run --rm geoanalytics python manage.py createsuperuser
+```
+
+Once all this has completed, you should be able to go to http://localhost:8000 or http://192.168.59.103:8000 on a Mac or Windows, and you will get to a basic website.  Logging in with the superuser you can add new data and layers by going to /admin on the website.
+
 ## About Geoanalytics
 
 Geoanalytics is an Open Source spatial data and analytics infrastructure based
