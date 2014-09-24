@@ -85,13 +85,13 @@ Geoanalytics is deployed as a Django project (not an app - see
 [Mezzanine](http://mezzanine.jupo.org)'s explanation as to why), incorporating
 a number of reusable apps that work in concert:
 
-* ga\_resources : Data publishing, semantics, and metadata.  WMS and soon to be
+* __ga\_resources__ : Data publishing, semantics, and metadata.  WMS and soon to be
   WFS web services that provide OGC standard ways of accessing and visualizing
   datasets on a map or providing them to be consumed GIS or analytics systems
   like Arc, SAS, or qGIS.
-* ga\_ows : WMS and WFS webservice code that can be adapted to projects.
+* __ga\_ows__ : WMS and WFS webservice code that can be adapted to projects.
 
 ## Licensing
 
-Geoanalytics is licensed under an MIT-style license.  See LICENSE.txt for 
-details
+Geoanalytics is licensed under an MIT-style license  called the RENCI Open Source license and is &copy; 2014 UNC Chapel Hill.  See LICENSE.txt for 
+details.
