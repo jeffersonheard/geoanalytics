@@ -1,17 +1,15 @@
 FROM ga_base 
 
-ADD . /home/docker/ga
-WORKDIR /home/docker/ga
-
-EXPOSE 22 80 8000 443 1338
-
 RUN useradd docker -s /bin/bash -d /home/docker
 RUN echo 'docker:docker' | chpasswd
 RUN chown -R docker:docker /home/docker
-VOLUME ["/home/docker/ga/geoanalytics/static/media"]
+RUN echo "docker ALL=(ALL) ALL" >> /etc/sudoers
 
-WORKDIR /home/docker
-RUN npm install carto
+ADD . /home/docker/geoanalytics
+WORKDIR /home/docker/geoanalytics
 
-WORKDIR /home/docker/ga
+EXPOSE 22 80 8000 443 1338
+VOLUME ["/home/docker/geoanalytics/geoanalytics/static/media"]
+
+WORKDIR /home/docker/geoanalytics
 CMD /bin/bash

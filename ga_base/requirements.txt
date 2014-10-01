@@ -1,9 +1,9 @@
-Django==1.6.1
+Django==1.7.0
 Fabric==1.8.0
 Fiona==1.0.2
 Jinja2==2.7.1
 MarkupSafe==0.18
-Mezzanine==3.0.5
+Mezzanine==3.1.10
 Pygments==1.6
 Shapely==1.2.18
 South==0.8.4
@@ -78,5 +78,6 @@ arrow
 xhtml2pdf
 markdown
 django-autocomplete-light
-django-resized
 django-inplaceedit
+django-jsonfield
+docker-py

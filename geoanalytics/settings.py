@@ -7,9 +7,9 @@ REDIS_HOST = os.environ.get('REDIS_HOST_NAME', 'redis')
 REDIS_PORT = int(os.environ.get('REDIS_PORT_NAME', '6379'))
 POSTGIS_HOST = os.environ.get('POSTGIS_HOST_NAME', 'postgis')
 POSTGIS_PORT = int(os.environ.get('POSTGIS_PORT_NAME', '5432'))
-POSTGIS_DB = os.environ.get('POSTGIS_DB', 'docker')
-POSTGIS_PASSWORD = os.environ.get('POSTGIS_PASSWORD', 'docker')
-POSTGIS_USER = os.environ.get('POSTGIS_USER', 'docker')
+POSTGIS_DB = os.environ.get('POSTGIS_DB', 'postgres')
+POSTGIS_PASSWORD = os.environ.get('POSTGIS_PASSWORD', 'postgres')
+POSTGIS_USER = os.environ.get('POSTGIS_USER', 'postgres')
 
 REDIS_CONNECTION = redis.Redis(
     host=REDIS_HOST,
@@ -316,6 +316,7 @@ INSTALLED_APPS = (
     "ga_ows",
     "gunicorn",
     "storages",
+    "django_docker_processes",
 )
 
 # List of processors used by RequestContext to populate the context.
@@ -331,6 +332,7 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     "django.core.context_processors.request",
     "django.core.context_processors.tz",
     "mezzanine.conf.context_processors.settings",
+    "mezzanine.pages.context_processors.page"
 )
 
 # List of middleware classes to use. Order is important; in the request phase,
@@ -460,3 +462,5 @@ DEFAULT_INPLACE_EDIT_OPTIONS_ONE_BY_ONE = True # modify the behavior of the DEFA
 # ADAPTOR_INPLACEEDIT = {'myadaptor': 'app_name.fields.MyAdaptor'} # Explain in Adaptor API
 INPLACE_GET_FIELD_URL = None # to change the url where django-inplaceedit use to get a field
 INPLACE_SAVE_URL = None # to change the url where django-inplaceedit use to save a field
+
+LAYER_CACHE_PATH = os.path.join(MEDIA_ROOT, '.cache', '_cached_layers')

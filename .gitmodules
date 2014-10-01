@@ -4,3 +4,6 @@
 [submodule "ga_resources"]
 	path = ga_resources
 	url = https://github.com/JeffHeard/ga_resources.git
+[submodule "django_docker_processes"]
+	path = django_docker_processes
+	url = https://github.com/JeffHeard/django_docker_processes

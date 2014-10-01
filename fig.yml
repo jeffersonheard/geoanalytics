@@ -2,43 +2,62 @@ postgis:
   image: jamesbrink/postgresql
 redis:
   image: dockerfile/redis
+rabbitmq: 
+  image: dockerfile/rabbitmq
 geoanalytics:
   build: .
   environment:
-    POSTGIS_HOST_NAME: postgis
-    POSTGIS_PORT_NAME: 5432
-    REDIS_HOST_NAME: redis
-    REDIS_PORT_NAME: 6379
+    POSTGIS_HOST: postgis
+    POSTGIS_PORT: 5432
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    POSTGIS_PASSWORD: postgres
     POSTGIS_DB: postgres
     POSTGIS_USER: postgres
-    POSTGIS_PASSWORD: postgres
     PGPASSWORD: postgres
   volumes:
     - "media:/home/docker/geoanalytics/geoanalytics/static/media"
-    - "logs:/home/docker/logs"
   ports:
-    - "0.0.0.0:8000:80"
-    - "0.0.0.0:1338:22"
+    - "1338:22"
+    - "8000:80"
   links:
     - postgis:postgis
     - redis:redis
+    - rabbitmq:rabbitmq
   command: /bin/bash init
-worker:
+defaultworker:
   build: .
   environment:
-    C_FORCE_ROOT: 1
-    POSTGIS_HOST_NAME: postgis
-    POSTGIS_PORT_NAME: 5432
-    REDIS_HOST_NAME: redis
-    REDIS_PORT_NAME: 6379
-    POSTGIS_DB: postgres
-    POSTGIS_USER: postgres
+    POSTGIS_HOST: postgis
+    POSTGIS_PORT: 5432
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
     POSTGIS_PASSWORD: postgres
+    POSTGIS_DB: postgres
     PGPASSWORD: postgres
+    C_FORCE_ROOT: 1
   volumes_from:
     - geoanalytics
   links:
     - postgis:postgis
     - redis:redis
-  command: celery worker -A geoanalytics -E
-
+    - rabbitmq:rabbitmq
+  command: celery worker -A geoanalytics -E -Q default
+dockerworker:
+  build: .
+  environment:
+    POSTGIS_HOST: postgis
+    POSTGIS_PORT: 5432
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    POSTGIS_PASSWORD: postgres
+    POSTGIS_DB: postgres
+    PGPASSWORD: postgres
+    C_FORCE_ROOT: 1
+  volumes_from:
+    - geoanalytics
+  links:
+    - postgis:postgis
+    - redis:redis
+    - rabbitmq:rabbitmq
+  command: celery worker -A geoanalytics -E -Q docker_container_tasks,docker_broadcast_tasks
