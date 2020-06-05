@@ -1,4 +1,4 @@
-Django==1.6.1
+Django==1.11.29
 Fabric==1.8.0
 Fiona==1.0.2
 Jinja2==2.7.1
