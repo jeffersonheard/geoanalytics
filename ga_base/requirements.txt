@@ -71,7 +71,7 @@ ssh-import-id==3.14
 stripe==1.11.0
 tornado==3.1.1
 uWSGI==1.9.20
-urllib3==1.5
+urllib3==1.26.5
 wsgiref==0.1.2
 django-nose
 arrow
